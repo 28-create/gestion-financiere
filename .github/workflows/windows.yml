@@ -19,17 +19,18 @@ jobs:
       - run: npm install
       - run: npm test
       - run: python -B -m unittest discover -s tests -p test_audit_excel.py
-      - run: npm run tauri -- build --bundles nsis
-      - name: Tester l'installation Windows
-        shell: pwsh
-        run: ./tests/windows-installer.ps1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: installateur-gestion-financiere-windows
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
-          if-no-files-found: error
+      - run: npm run tauri -- build --no-bundle
       - uses: actions/upload-artifact@v4
         with:
           name: gestion-financiere-windows
           path: src-tauri/target/release/gestion-financiere.exe
           if-no-files-found: error
+      - run: npm run tauri -- bundle --bundles nsis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installateur-gestion-financiere-windows
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+      - name: Tester l'installation Windows
+        shell: pwsh
+        run: ./tests/windows-installer.ps1

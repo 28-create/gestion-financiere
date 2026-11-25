@@ -41,9 +41,9 @@ foreach ($shortcut in @($desktopShortcut, $menuShortcut[0].FullName)) {
     }
 }
 
-$running = Start-Process -FilePath $application -PassThru
+$running = Start-Process -FilePath $application -WindowStyle Hidden -PassThru
 try {
-    Wait-ForCondition { Test-Path -LiteralPath $database -PathType Leaf } 'La base locale n’a pas été créée.'
+    Wait-ForCondition { Test-Path -LiteralPath $database -PathType Leaf } 'La base locale n''a pas été créée.'
     $seed = @'
 import sqlite3
 import sys
@@ -53,7 +53,7 @@ with closing(sqlite3.connect(sys.argv[1], timeout=10)) as db:
         db.execute("INSERT INTO transactions (title, kind, status, occurred_on, amount_micros) VALUES ('Smoke test', 'income', 'realized', '2026-01-01', 123000000)")
 '@
     $seed | python - $database
-    if ($LASTEXITCODE -ne 0) { throw 'L’écriture de contrôle SQLite a échoué.' }
+    if ($LASTEXITCODE -ne 0) { throw 'L''écriture de contrôle SQLite a échoué.' }
 } finally {
     $running.Refresh()
     if (-not $running.HasExited) {
@@ -75,7 +75,7 @@ with closing(sqlite3.connect(uri, uri=True)) as db:
     assert db.execute("SELECT title, amount_micros FROM transactions").fetchall() == [("Smoke test", 123000000)]
 '@
     $check | python - $database
-    if ($LASTEXITCODE -ne 0) { throw 'La base de contrôle n’a pas été préservée.' }
+    if ($LASTEXITCODE -ne 0) { throw 'La base de contrôle n''a pas été préservée.' }
 }
 
 Invoke-Setup '/S /UPDATE'
@@ -87,5 +87,5 @@ Wait-ForCondition {
     -not (Test-Path -LiteralPath $application) -and
     -not (Test-Path -LiteralPath $desktopShortcut) -and
     -not (Test-Path -LiteralPath $menuShortcut[0].FullName)
-} 'La désinstallation n’a pas retiré le programme et ses raccourcis.'
+} 'La désinstallation n''a pas retiré le programme et ses raccourcis.'
 Assert-DataPreserved
