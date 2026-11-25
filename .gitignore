@@ -1,0 +1,13 @@
+node_modules/
+dist/
+target/
+.env*
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*.sqlite*
+*.db*
+*.bak
+*.pdf
+private/

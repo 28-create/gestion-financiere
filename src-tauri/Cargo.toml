@@ -1,0 +1,13 @@
+[package]
+name = "gestion-financiere"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = "2"
+
+[dependencies]
+tauri = "2"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
