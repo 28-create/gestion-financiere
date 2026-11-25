@@ -17,7 +17,7 @@ npm run tauri -- build --no-bundle
 
 Les dépendances sont téléchargées à la préparation du poste de développement. L’application utilise ses ressources locales à l’exécution. L’installateur reste à développer et à valider.
 
-Un inventaire Excel en lecture seule est disponible avec `python -B tools/audit_excel.py chemin/vers/classeur.xlsx`. Le rapport contient des métadonnées du classeur et doit rester avec les données locales.
+Un inventaire Excel en lecture seule est disponible avec `python -B tools/audit_excel.py chemin/vers/classeur.xlsx`. La commande `python -B tools/reconcile_budget.py chemin/vers/classeur.xlsx` calcule les totaux de contrôle du modèle de budget 2026–2040 et signale les lignes à examiner. Garde ces rapports avec les données locales.
 
 - [Cahier des charges](CAHIER_DES_CHARGES.md)
 - [Plan de développement et audit](PLAN_DE_DEVELOPPEMENT.md)

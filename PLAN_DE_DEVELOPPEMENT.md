@@ -4,7 +4,7 @@
 
 Le classeur de référence utilise un récapitulatif, une feuille de graphiques, une feuille de catégories et une feuille par année sur la période 2026–2040. Deux tableaux structurés par année séparent les revenus et les dépenses. Les listes de validation lient le registre aux listes de catégories et de moyens de paiement. Les champs existants comprennent la date, le mois calculé, la description, le montant, le moyen de paiement, la catégorie et la note.
 
-L’audit en lecture seule confirme la concordance des totaux de revenus et de dépenses 2026 après conversion à six décimales. Les écarts observés sur la représentation brute d’Excel sont inférieurs à un millionième de shekel. Aucun mouvement daté n’a été relevé dans les autres années de la version fournie. Les résultats détaillés et le classeur restent locaux.
+L’audit en lecture seule confirme la concordance des totaux de revenus et de dépenses 2026 après conversion à six décimales. Les écarts observés sur la représentation brute d’Excel sont inférieurs à un millionième de shekel. Aucun mouvement daté n’a été relevé dans les autres années de la version fournie. Les résultats détaillés et le classeur restent locaux. Le récapitulatif et certains graphiques utilisent des plages anciennes. L’import se réconcilie avec le contenu des tableaux structurés et les indicateurs calculés dans les feuilles annuelles.
 
 ### Correspondance de migration
 
