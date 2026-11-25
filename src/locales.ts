@@ -10,6 +10,7 @@ export const translations = {
     language: "Langue", light: "Clair", dark: "Sombre", theme: "Thème", count: "Opérations",
     filterError: "Vérifie les dates de la période.", amountError: "Saisis un montant avec six décimales au maximum.",
     error: "L’opération a échoué. Réessaie.", conflict: "Cette opération a changé. Recharge la liste.",
+    details: "Détails", category: "Catégorie", paymentMethod: "Moyen de paiement", note: "Note",
     working: "Chargement…", realizedTotals: "Totaux réalisés de la sélection"
   },
   en: {
@@ -23,6 +24,7 @@ export const translations = {
     language: "Language", light: "Light", dark: "Dark", theme: "Theme", count: "Transactions",
     filterError: "Check the date range.", amountError: "Enter an amount with up to six decimal places.",
     error: "The operation failed. Try again.", conflict: "This transaction changed. Refresh the list.",
+    details: "Details", category: "Category", paymentMethod: "Payment method", note: "Note",
     working: "Loading…", realizedTotals: "Actual totals for the current selection"
   },
   he: {
@@ -36,6 +38,7 @@ export const translations = {
     language: "שפה", light: "בהיר", dark: "כהה", theme: "ערכת נושא", count: "תנועות",
     filterError: "יש לבדוק את טווח התאריכים.", amountError: "יש להזין סכום עם עד שש ספרות אחרי הנקודה.",
     error: "הפעולה נכשלה. יש לנסות שוב.", conflict: "התנועה השתנתה. יש לרענן את הרשימה.",
+    details: "פרטים", category: "קטגוריה", paymentMethod: "אמצעי תשלום", note: "הערה",
     working: "בטעינה…", realizedTotals: "סכומי התנועות שבוצעו לפי הסינון"
   }
 } as const;

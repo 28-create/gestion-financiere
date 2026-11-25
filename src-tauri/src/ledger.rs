@@ -17,6 +17,9 @@ pub struct EntryInput {
     status: String,
     occurred_on: String,
     amount_micros: String,
+    category: Option<String>,
+    payment_method: Option<String>,
+    note: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -29,6 +32,9 @@ pub struct Entry {
     status: String,
     occurred_on: String,
     amount_micros: String,
+    category: Option<String>,
+    payment_method: Option<String>,
+    note: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -44,13 +50,15 @@ pub struct LedgerPage {
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let version: i64 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    match version {
-        0 => {
-            tx.execute_batch(include_str!("../migrations/001_ledger.sql"))?;
-            tx.pragma_update(None, "user_version", 1)?;
-        }
-        1 => {}
-        _ => return Err(rusqlite::Error::InvalidQuery),
+    if !(0..=2).contains(&version) {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    if version == 0 {
+        tx.execute_batch(include_str!("../migrations/001_ledger.sql"))?;
+    }
+    if version < 2 {
+        tx.execute_batch(include_str!("../migrations/002_workbook_fields.sql"))?;
+        tx.pragma_update(None, "user_version", 2)?;
     }
     tx.commit()
 }
@@ -97,7 +105,8 @@ pub fn read_ledger(
           AND (?4 = '' OR instr(lower(title), lower(?4)) > 0)
           AND (deleted_at IS NOT NULL) = ?5";
     let entries = {
-        let query = format!("SELECT id, revision, title, kind, status, occurred_on, amount_micros
+        let query = format!("SELECT id, revision, title, kind, status, occurred_on, amount_micros,
+            category, payment_method, note
             {conditions} ORDER BY occurred_on DESC, id DESC LIMIT ?6 OFFSET ?7");
         let mut statement = snapshot.prepare(&query).map_err(|_| "database")?;
         let rows = statement.query_map(
@@ -111,6 +120,9 @@ pub fn read_ledger(
                     status: row.get(4)?,
                     occurred_on: row.get(5)?,
                     amount_micros: row.get::<_, i64>(6)?.to_string(),
+                    category: row.get(7)?,
+                    payment_method: row.get(8)?,
+                    note: row.get(9)?,
                 })
             }
         ).map_err(|_| "database")?;
@@ -165,16 +177,18 @@ pub fn save_transaction(
     let connection = database.lock().map_err(|_| "database")?;
     let affected = match (id, revision) {
         (None, None) => connection.execute(
-            "INSERT INTO transactions (title, kind, status, occurred_on, amount_micros)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![title, input.kind, input.status, input.occurred_on, amount],
+            "INSERT INTO transactions (title, kind, status, occurred_on, amount_micros, category, payment_method, note)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![title, input.kind, input.status, input.occurred_on, amount,
+                input.category, input.payment_method, input.note],
         ),
         (Some(id), Some(revision)) => connection.execute(
             "UPDATE transactions SET title = ?1, kind = ?2, status = ?3,
-                occurred_on = ?4, amount_micros = ?5, revision = revision + 1,
-                updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?6 AND revision = ?7 AND deleted_at IS NULL",
-            params![title, input.kind, input.status, input.occurred_on, amount, id, revision],
+                occurred_on = ?4, amount_micros = ?5, category = ?6, payment_method = ?7, note = ?8,
+                revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?9 AND revision = ?10 AND deleted_at IS NULL",
+            params![title, input.kind, input.status, input.occurred_on, amount,
+                input.category, input.payment_method, input.note, id, revision],
         ),
         _ => return Err("conflict"),
     }.map_err(|_| "database")?;

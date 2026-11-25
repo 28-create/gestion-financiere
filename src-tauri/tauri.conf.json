@@ -11,12 +11,43 @@
   },
   "app": {
     "windows": [
-      {"label": "main", "title": "Gestion financière", "width": 1180, "height": 780, "minWidth": 540, "minHeight": 480}
+      {
+        "label": "main",
+        "title": "Gestion financière",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 540,
+        "minHeight": 480
+      }
     ],
     "security": {
       "devCsp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost ws://127.0.0.1:1420; object-src 'none'; base-uri 'none'",
       "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'"
     }
   },
-  "bundle": {"active": false, "icon": ["icons/icon.ico", "icons/icon.png"]}
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "French",
+          "English"
+        ],
+        "displayLanguageSelector": true
+      }
+    }
+  }
 }

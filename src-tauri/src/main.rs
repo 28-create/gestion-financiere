@@ -2,7 +2,7 @@
 
 mod ledger;
 
-use std::{fs, sync::Mutex, time::Duration};
+use std::{env, fs, sync::Mutex, time::Duration};
 
 use rusqlite::Connection;
 use tauri::Manager;
@@ -10,7 +10,11 @@ use tauri::Manager;
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            let directory = app.path().app_data_dir()?;
+            let executable = env::current_exe()?;
+            let directory = match executable.parent() {
+                Some(directory) if directory.join("portable-mode").is_file() => directory.join("data"),
+                _ => app.path().app_data_dir()?,
+            };
             fs::create_dir_all(&directory)?;
             let mut connection = Connection::open(directory.join("ledger.sqlite3"))?;
             connection.busy_timeout(Duration::from_secs(5))?;

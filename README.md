@@ -12,10 +12,10 @@ Prérequis de compilation : Node.js 24, Rust stable avec la cible MSVC, Microso
 npm install
 npm test
 npm run tauri -- dev
-npm run tauri -- build --no-bundle
+npm run tauri -- build --bundles nsis
 ```
 
-Les dépendances sont téléchargées à la préparation du poste de développement. L’application utilise ses ressources locales à l’exécution. L’installateur reste à développer et à valider.
+Les dépendances sont téléchargées à la préparation du poste de développement. L’application utilise ses ressources locales à l’exécution. L’installateur NSIS installe le logiciel pour le compte Windows courant et inclut le runtime d’installation WebView2 hors ligne. Le retrait de l’application conserve par défaut la base locale. Les compilations et l’installateur génériques sont disponibles dans les artefacts du workflow Windows.
 
 Un inventaire Excel en lecture seule est disponible avec `python -B tools/audit_excel.py chemin/vers/classeur.xlsx`. La commande `python -B tools/reconcile_budget.py chemin/vers/classeur.xlsx` calcule les totaux de contrôle du modèle de budget 2026–2040 et signale les lignes à examiner. Garde ces rapports avec les données locales.
 

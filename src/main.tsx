@@ -8,7 +8,8 @@ import "./styles.css";
 type Kind = "income" | "expense";
 type Status = "realized" | "planned" | "pending";
 type View = "journal" | Kind | "trash";
-type Input = { title: string; kind: Kind; status: Status; occurredOn: string; amountMicros: string };
+type Details = { category: string | null; paymentMethod: string | null; note: string | null };
+type Input = Details & { title: string; kind: Kind; status: Status; occurredOn: string; amountMicros: string };
 type Entry = Input & { id: number; revision: number };
 type Page = { entries: Entry[]; count: number; incomeMicros: string; expenseMicros: string; pageSize: number };
 type Editor = Omit<Input, "amountMicros"> & { amount: string; saved?: Entry };
@@ -85,9 +86,10 @@ function App() {
     setEditor(entry ? {
       title: entry.title, kind: entry.kind, status: entry.status,
       occurredOn: entry.occurredOn, amount: decimalAmount(BigInt(entry.amountMicros)), saved: entry,
+      category: entry.category, paymentMethod: entry.paymentMethod, note: entry.note,
     } : {
       title: "", amount: "", kind: view === "income" ? "income" : "expense",
-      status: "realized", occurredOn: day(),
+      status: "realized", occurredOn: day(), category: null, paymentMethod: null, note: null,
     });
   }
 
@@ -107,6 +109,7 @@ function App() {
       const input: Input = {
         title: editor.title, kind: editor.kind, status: editor.status,
         occurredOn: editor.occurredOn, amountMicros,
+        category: editor.category || null, paymentMethod: editor.paymentMethod || null, note: editor.note || null,
       };
       await invoke("save_transaction", {
         input, id: editor.saved?.id ?? null, revision: editor.saved?.revision ?? null,
@@ -177,6 +180,14 @@ function App() {
                 <option value="realized">{t.realized}</option><option value="planned">{t.planned}</option><option value="pending">{t.pending}</option>
               </select></label>
             </div>
+            <details open={Boolean(editor.saved && (editor.saved.category || editor.saved.paymentMethod || editor.saved.note))}>
+              <summary>{t.details}</summary>
+              <div className="fields">
+                <label>{t.category}<input value={editor.category ?? ""} onChange={(e) => setEditor({ ...editor, category: e.target.value })} /></label>
+                <label>{t.paymentMethod}<input value={editor.paymentMethod ?? ""} onChange={(e) => setEditor({ ...editor, paymentMethod: e.target.value })} /></label>
+                <label>{t.note}<input value={editor.note ?? ""} onChange={(e) => setEditor({ ...editor, note: e.target.value })} /></label>
+              </div>
+            </details>
             <div className="form-actions">
               <button type="button" onClick={() => setEditor({ ...editor, occurredOn: day() })}>{t.today}</button>
               <button type="button" onClick={() => setEditor({ ...editor, occurredOn: day(-1) })}>{t.yesterday}</button>
@@ -204,7 +215,11 @@ function App() {
             <table>
               <thead><tr>{(["date", "title", "kind", "status", "amount", "actions"] as const).map((name) => <th key={name} scope="col">{t[name]}</th>)}</tr></thead>
               <tbody>{visible.entries.map((entry) => <tr key={entry.id}>
-                <td><bdi>{entry.occurredOn}</bdi></td><td><bdi>{entry.title}</bdi></td>
+                <td><bdi>{entry.occurredOn}</bdi></td><td><bdi>{entry.title}</bdi>
+                  {(entry.category || entry.paymentMethod) && <small className="transaction-details">
+                    <br /><bdi>{[entry.category, entry.paymentMethod].filter(Boolean).join(" · ")}</bdi>
+                  </small>}
+                </td>
                 <td>{t[entry.kind]}</td><td><span className={"status " + entry.status}>{t[entry.status]}</span></td>
                 <td className="numeric"><bdi>{currency(BigInt(entry.amountMicros))}</bdi></td>
                 <td><div className="row-actions">{view === "trash"
