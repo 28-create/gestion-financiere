@@ -117,7 +117,7 @@ pub fn read_ledger(
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|_| "database")?
     };
     let query = format!("SELECT kind, status, amount_micros {conditions}");
-    let mut statement = connection.prepare(&query).map_err(|_| "database")?;
+    let mut statement = snapshot.prepare(&query).map_err(|_| "database")?;
     let mut rows = statement.query(params![from, to, kind, search, trash]).map_err(|_| "database")?;
     let (mut income_micros, mut expense_micros, mut count) = (0_i128, 0_i128, 0_u64);
     while let Some(row) = rows.next().map_err(|_| "database")? {
