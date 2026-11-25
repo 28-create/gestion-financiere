@@ -2,15 +2,28 @@
 
 ## Audit de départ
 
-Le dépôt commence à vide. Plusieurs éditions du classeur 2026–2040 ont été repérées, dont le classeur professionnel, les versions de réparation et les éditions de mise en forme. Les extraits disponibles identifient un récapitulatif pluriannuel et des indicateurs par année pour les revenus, les dépenses, le solde, l’épargne et le taux d’épargne. Des valeurs à plus de deux décimales figurent dans les extraits. Le tableau de bord, l’analyse des dépenses par catégorie et la série mensuelle figurent dans les extraits. Le classeur professionnel décrit le taux d’épargne comme le rapport des versements vers le livret aux revenus. Pour 2026, les lignes datées extraites du classeur professionnel et de deux éditions de présentation concordent sur la date, la description, le montant, le moyen de paiement, la catégorie et la note. Les éditions de présentation donnent aussi les mêmes totaux annuels sur la portion comparée. L’inventaire cellule par cellule, la comparaison des formules et la classification effective des versements restent à vérifier sur les fichiers sources.
+Le classeur de référence utilise un récapitulatif, une feuille de graphiques, une feuille de catégories et une feuille par année sur la période 2026–2040. Deux tableaux structurés par année séparent les revenus et les dépenses. Les listes de validation lient le registre aux listes de catégories et de moyens de paiement. Les champs existants comprennent la date, le mois calculé, la description, le montant, le moyen de paiement, la catégorie et la note.
 
-La version de référence doit être identifiée par comparaison des données et des formules, y compris les variantes de présentation, avant de migrer des transactions. Tenir un inventaire des feuilles visibles et masquées, tableaux, colonnes, validations et graphiques. Contrôler les comptages et les totaux par mois, année et devise, ainsi que l’épargne et les caractères hébreux. Les écarts sont consignés localement. Aucun classeur financier n’est inclus dans le dépôt.
+L’audit en lecture seule confirme la concordance des totaux de revenus et de dépenses 2026 après conversion à six décimales. Les écarts observés sur la représentation brute d’Excel sont inférieurs à un millionième de shekel. Aucun mouvement daté n’a été relevé dans les autres années de la version fournie. Les résultats détaillés et le classeur restent locaux.
+
+### Correspondance de migration
+
+| Source Excel | Destination et contrôle |
+| --- | --- |
+| Tableaux de revenus et de dépenses | Déterminer le type par tableau, préserver le signe et identifier chaque ligne par classeur, feuille, tableau et coordonnée. |
+| Date et mois | Convertir la date avec le système de dates déclaré par le classeur et recomposer le mois depuis cette date. |
+| Description, montant et notes | Préserver les caractères d’origine et contrôler le montant à six décimales. |
+| Source et catégorie | Relier aux listes de référence. Préserver les catégories, sous-catégories et moyens historiques même quand ils sont peu utilisés. |
+| Lignes de total et lignes modèles à zéro | Les identifier avant le comptage. Les présenter à part dans le rapport d’import. |
+| Résumé, graphiques, formules et taux d’épargne | Comparer les résultats recalculés à Excel. Reproduire l’épargne du classeur avec ses catégories de versements. |
+
+Le montant reste local lors des vérifications. Un écart de réconciliation, une ligne active incomplète ou un doublon potentiel doit être présenté dans l’aperçu. L’écriture en base attend la confirmation du lot.
 
 ## Développement par étapes
 
 | Étape | Travail et validation |
 | --- | --- |
-| 1. Audit et conception | Finir la comparaison des classeurs, identifier la source de référence, confirmer les définitions d’épargne et les règles de précision. |
+| 1. Audit et conception | Source de référence identifiée et structure auditée. Préparer le rapport automatisé de réconciliation pour l’assistant d’import. |
 | 2. Fondations | Vérifier la compilation Windows, figer les versions des dépendances, vérifier la migration sur disque et la réouverture de la base. |
 | 3. Interface | Vérifier la navigation, les trois langues et les deux thèmes sous WebView2, dont les écrans étroits et le redimensionnement Windows. |
 | 4. Transactions | Compléter la saisie, les raccourcis, les catégories, les moyens de paiement et les tableaux avancés. Vérifier l’historique, la corbeille et les révisions concurrentes. |
