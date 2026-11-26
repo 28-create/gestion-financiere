@@ -18,6 +18,7 @@ jobs:
       - run: rustup default stable
       - run: npm install
       - run: npm test
+      - run: npm run build
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: python -B -m unittest discover -s tests -p test_audit_excel.py
       - run: npm run tauri -- build --no-bundle

@@ -1,6 +1,7 @@
 import { parseAmount } from './money.ts';
 import {catalogRanges,type CatalogValue} from './catalogRanges.ts';
-export type ImportRow = { title:string; kind:string; occurredOn:string; amountMicros:string; category:string|null; paymentMethod:string|null; note:string|null };
+import {sourceMicros} from './importing.ts';
+export type ImportRow = { title:string; kind:string; occurredOn:string; amountMicros:string; category:string|null; paymentMethod:string|null; note:string|null;sourceKey?:string;sourceSheet?:string;sourceTable?:string;sourceRow?:number;currency?:string;originalMicros?:string;rateMicros?:string;rateDate?:string };
 export type Preview = { rows:ImportRow[]; issues:string[]; catalog:CatalogValue[];catalogIssues:string[] };
 const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const xml=(s:string)=>{const d=new DOMParser().parseFromString(s,'application/xml');if(d.querySelector('parsererror'))throw Error('XML invalide');return d;};
@@ -36,9 +37,23 @@ async function unzip(buffer:ArrayBuffer) {
  return files;
 }
 function resolve(base:string,target:string){const parts=target.startsWith('/')?[]:base.split('/').slice(0,-1);for(const part of target.split('/')){if(part==='..')parts.pop();else if(part&&part!=='.')parts.push(part);}return parts.join('/');}
+export type SourceSheet={name:string;rows:{number:number;cells:string[];errors:number[]}[]};
+export type SourceBook={sheets:SourceSheet[];since1904:boolean;fingerprint:string};
+export async function readWorkbookTables(file:File):Promise<SourceBook>{
+ if(file.size>30000000)throw Error('size');const buffer=await file.arrayBuffer(),files=await unzip(buffer);
+ const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buffer))).map(v=>v.toString(16).padStart(2,'0')).join('');
+ const required=(path:string)=>{const value=files.get(path);if(!value)throw Error('xlsx');return xml(value);};const book=required('xl/workbook.xml');
+ const links=new Map(nodes(required('xl/_rels/workbook.xml.rels'),'Relationship').map(r=>[r.getAttribute('Id'),resolve('xl/workbook.xml',r.getAttribute('Target')??'')]));
+ const strings=files.has('xl/sharedStrings.xml')?nodes(required('xl/sharedStrings.xml'),'si').map(si=>text(si,'t')):[];const sheets:SourceSheet[]=[];
+ for(const sheet of nodes(book,'sheet')){const path=links.get(sheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id'));if(!path||!path.startsWith('xl/worksheets/'))continue;const data=required(path),rows:SourceSheet['rows']=[];
+  for(const row of nodes(data,'row')){const cells:string[]=[],errors:number[]=[];for(const cell of nodes(row,'c')){const ref=/^([A-Z]+)\d+$/.exec(cell.getAttribute('r')??'');if(!ref)throw Error('xlsx');const column=Array.from(ref[1]).reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1;if(column>16383)throw Error('xlsx');const kind=cell.getAttribute('t'),value=text(cell,'v');cells[column]=kind==='s'?strings[Number(value)]:kind==='inlineStr'?text(cell,'t'):value;if(kind==='e')errors.push(column);}rows.push({number:Number(row.getAttribute('r')),cells,errors});if(rows.length>100000)throw Error('size');}
+  sheets.push({name:sheet.getAttribute('name')??'',rows});
+ }return {sheets,since1904:['1','true'].includes(nodes(book,'workbookPr')[0]?.getAttribute('date1904')??''),fingerprint};
+}
 export async function readWorkbook(file:File):Promise<Preview>{
  if(file.size>30_000_000)throw Error('Fichier limité à 30 Mo');
- const files=await unzip(await file.arrayBuffer());
+ const buffer=await file.arrayBuffer();const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buffer))).map(v=>v.toString(16).padStart(2,'0')).join('');
+ const files=await unzip(buffer);
  const required=(name:string)=>{const value=files.get(name);if(!value)throw Error(`Partie Excel absente : ${name}`);return xml(value);};
  const book=required('xl/workbook.xml'), rels=required('xl/_rels/workbook.xml.rels');
  const links=new Map(nodes(rels,'Relationship').map(r=>[r.getAttribute('Id'),resolve('xl/workbook.xml',r.getAttribute('Target')??'')]));
@@ -89,13 +104,8 @@ export async function readWorkbook(file:File):Promise<Preview>{
       const serial=Number(date);if(!Number.isInteger(serial)||serial<0||(!since1904&&serial===60))throw Error('date Excel invalide');
       when=new Date(Date.UTC(since1904?1904:1899,since1904?0:11,since1904?1:31)+(serial-(!since1904&&serial>60?1:0))*86400000).toISOString().slice(0,10);
      }
-     let micros:bigint;
-     try{micros=parseAmount(amount);}catch{
-      const value=Number(amount),rounded=Math.round(value*1e6);
-      if(!Number.isFinite(value)||Math.abs(value-rounded/1e6)>1e-12||!Number.isSafeInteger(rounded))throw Error('précision monétaire supérieure à six décimales');
-      micros=BigInt(rounded);
-     }
-     result.rows.push({title,kind,occurredOn:when,amountMicros:micros.toString(),category:category||null,paymentMethod:paymentMethod||null,note:note||null});
+     const micros=sourceMicros(amount);
+     result.rows.push({title,kind,occurredOn:when,amountMicros:micros.toString(),category:category||null,paymentMethod:paymentMethod||null,note:note||null,sourceKey:`${fingerprint}:${name}:${tableName}:${row}`,sourceSheet:name,sourceTable:tableName,sourceRow:row});
     }catch(error){result.issues.push(`${name} / ${tableName} / ligne ${row} : ${String(error)}`);}
    }
   }

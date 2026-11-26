@@ -6,12 +6,11 @@ import {decimalAmount,formatIls} from './domain/money.ts';
 import type {CatalogItem} from './domain/catalog.ts';
 import {locales,translations,type Language} from './locales.ts';
 import {financeCopy} from './financeCopy.ts';
+import {FinancialChart} from './FinancialChart.tsx';
 export type OverviewMode='dashboard'|'comparison'|'trends';
 function exportCsv(lines:string[][],name:string){const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.map(line=>line.map(csvCell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}
 export function TrendChart({labels,series,language,title}:{labels:string[];series:{name:string;values:bigint[];color:string}[];language:Language;title:string}){
- const values=series.flatMap(s=>s.values);const min=values.reduce((a,b)=>b<a?b:a,0n),max=values.reduce((a,b)=>b>a?b:a,0n),range=max-min||1n;
- const width=Math.max(600,labels.length*65),x=(i:number)=>40+(width-80)*i/Math.max(1,labels.length-1),y=(v:bigint)=>20+Number((max-v)*16000n/range)/100;
- return <div className="surface trend-chart"><p>{series.map(s=><span className="chart-legend" key={s.name}><i style={{background:s.color}}/>{s.name}</span>)}</p><div className="chart-scroll"><svg width={width} height="225" role="img" aria-label={title}><title>{title}</title><line x1="25" x2={width-20} y1={y(0n)} y2={y(0n)} stroke="var(--line)"/>{labels.map((label,i)=><text key={label} x={x(i)} y="210" textAnchor="middle" fill="currentColor" fontSize="11">{label}</text>)}{series.map(s=><g key={s.name}><polyline points={s.values.map((v,i)=>`${x(i)},${y(v)}`).join(' ')} fill="none" stroke={s.color} strokeWidth="2.5"/>{s.values.map((v,i)=><circle key={i} cx={x(i)} cy={y(v)} r="4" fill={s.color}><title>{s.name} · {labels[i]} : {formatIls(v,locales[language])}</title></circle>)}</g>)}</svg></div></div>;
+ return <FinancialChart id={title} title={title} labels={labels} series={series} language={language} temporal/>;
 }
 export function FinanceOverview({mode,language,version,catalog}:{mode:OverviewMode;language:Language;version:number;catalog:CatalogItem[]}){
  const t=translations[language],w=financeCopy[language];

@@ -49,7 +49,8 @@ with ZipFile(sys.argv[1]) as z:
   if name and name.strip() and {'kind':kind,'name':name} not in catalog:catalog.append({'kind':kind,'name':name})
 print(json.dumps({'rows':rows,'catalog':catalog,'summary':summary},default=str,ensure_ascii=False))`,[path]);
 const canonical=rows=>rows.map(row=>JSON.stringify(Object.fromEntries(Object.entries(row).sort(([a],[b])=>a.localeCompare(b))))).sort();
-assert.deepEqual(canonical(preview.rows),canonical(expected.rows));
+assert.deepEqual(canonical(preview.rows.map(({sourceKey,sourceSheet,sourceTable,sourceRow,...row})=>row)),canonical(expected.rows));
+assert.equal(new Set(preview.rows.map(r=>r.sourceKey)).size,preview.rows.length);
 assert.deepEqual(canonical(preview.catalog),canonical(expected.catalog));
 const reports=preview.rows.map((r,i)=>({...r,id:i+1,status:'realized'}));
 for(const [year,control] of Object.entries(expected.summary.years)){

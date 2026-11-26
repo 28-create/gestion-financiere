@@ -1,15 +1,18 @@
-export type ReportRow={id:number;revision?:number;title:string;kind:string;status:string;occurredOn:string;amountMicros:string;category:string|null;paymentMethod:string|null;note:string|null};
+export type ReportRow={id:number;revision?:number;title:string;kind:string;status:string;occurredOn:string;amountMicros:string;category:string|null;paymentMethod:string|null;note:string|null;projectId?:number|null;tags?:number[];splits?:{category:string;amountMicros:string}[];nature?:string|null;necessity?:string|null};
 export type Bucket={name:string;income:bigint;expense:bigint;count:number};
 export function summarize(rows:ReportRow[],field:'month'|'category'|'payment'|'year') {
  const buckets=new Map<string,Bucket>();
  for(const row of rows){
   if(row.status!=='realized')continue;
-  const name=field==='month'?row.occurredOn.slice(0,7):field==='year'?row.occurredOn.slice(0,4):field==='category'?row.category??'':row.paymentMethod??'';
-  const b=buckets.get(name)??{name,income:0n,expense:0n,count:0};
-  if(row.kind==='income')b.income+=BigInt(row.amountMicros);else b.expense+=BigInt(row.amountMicros);
-  b.count++;buckets.set(name,b);
+  const allocations=field==='category'?categoryAllocations(row):[{category:field==='month'?row.occurredOn.slice(0,7):field==='year'?row.occurredOn.slice(0,4):row.paymentMethod??'',amountMicros:row.amountMicros}];
+  for(const allocation of allocations){const name=allocation.category;const b=buckets.get(name)??{name,income:0n,expense:0n,count:0};if(row.kind==='income')b.income+=BigInt(allocation.amountMicros);else b.expense+=BigInt(allocation.amountMicros);b.count++;buckets.set(name,b);}
  }
  return [...buckets.values()].sort((a,b)=>a.name.localeCompare(b.name));
+}
+export function categoryAllocations(row:ReportRow){
+ if(!row.splits?.length)return [{category:row.category??'',amountMicros:row.amountMicros}];
+ const grouped=new Map<string,bigint>();for(const split of row.splits)grouped.set(split.category,(grouped.get(split.category)??0n)+BigInt(split.amountMicros));
+ return [...grouped].map(([category,amount])=>({category,amountMicros:amount.toString()}));
 }
 export function csvCell(value:string){
  // Neutralize spreadsheet formulas, including prefixes hidden by whitespace.

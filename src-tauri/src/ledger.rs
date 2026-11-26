@@ -1,13 +1,14 @@
 use std::sync::Mutex;
 
 use chrono::NaiveDate;
-use rusqlite::{params, Connection, TransactionBehavior};
+use rusqlite::{params, Connection, TransactionBehavior,OptionalExtension};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
 type Database<'a> = State<'a, Mutex<Connection>>;
 type CommandResult<T> = Result<T, &'static str>;
 const PAGE_SIZE: u32 = 50;
+pub const SCHEMA_VERSION:i64=5;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +51,7 @@ pub struct LedgerPage {
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let version: i64 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if !(0..=4).contains(&version) {
+    if !(0..=SCHEMA_VERSION).contains(&version) {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version == 0 {
@@ -67,6 +68,10 @@ pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     if version < 4 {
         tx.execute_batch(include_str!("../migrations/004_catalog.sql"))?;
         tx.pragma_update(None, "user_version", 4)?;
+    }
+    if version < 5 {
+        tx.execute_batch(include_str!("../migrations/005_modules.sql"))?;
+        tx.pragma_update(None,"user_version",SCHEMA_VERSION)?;
     }
     tx.commit()
 }
@@ -193,6 +198,19 @@ pub(crate) fn validate_input(input:&EntryInput)->CommandResult<i64>{
 }
 
 pub(crate) fn write_transaction(connection:&Connection,input:&EntryInput,id:Option<i64>,revision:Option<i64>,amount:i64,title:&str)->CommandResult<()>{
+    if let Some(id)=id {
+        crate::complex::validate_links(connection,id,&input.kind,amount).map_err(|_|"refund")?;
+        let split_count:i64=connection.query_row("SELECT count(*) FROM transaction_splits WHERE transaction_id=?1",[id],|r|r.get(0)).map_err(|_|"database")?;
+        if split_count>0 {
+            let mut statement=connection.prepare("SELECT amount_micros FROM transaction_splits WHERE transaction_id=?1").map_err(|_|"database")?;
+            let values=statement.query_map([id],|r|r.get::<_,i64>(0)).map_err(|_|"database")?;
+            let mut total=0_i128;for value in values{total+=i128::from(value.map_err(|_|"database")?);}if total!=i128::from(amount){return Err("splits");}
+        }
+        let conversion:Option<(String,Option<i64>,Option<i64>)>=connection.query_row("SELECT currency,original_micros,rate_micros FROM transaction_details WHERE transaction_id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|_|"database")?;
+        if let Some((currency,original,rate))=conversion{if currency!="ILS"&&crate::details::converted(original.ok_or("currency")?,rate.ok_or("currency")?).map_err(|_|"currency")?!=amount{return Err("currency");}}
+        let installment:Option<(Option<i64>,i64)>=connection.query_row("SELECT installment_plan_id,amount_micros FROM transactions WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(|_|"database")?;
+        if let Some((Some(_),previous))=installment{if previous!=amount{return Err("installment");}}
+    }
     let affected = match (id, revision) {
         (None, None) => connection.execute(
             "INSERT INTO transactions (title, kind, status, occurred_on, amount_micros, category, payment_method, note)

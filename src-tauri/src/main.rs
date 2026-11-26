@@ -5,6 +5,12 @@ mod data_tools;
 mod reporting;
 mod catalog;
 mod table_tools;
+mod features;
+mod details;
+mod complex;
+mod recurrence;
+mod backups;
+mod files;
 
 use std::{env, fs, sync::Mutex, time::Duration};
 
@@ -25,7 +31,7 @@ fn main() {
             connection.pragma_update(None, "foreign_keys", true)?;
             connection.pragma_update(None, "journal_mode", "WAL")?;
             let schema:i64=connection.pragma_query_value(None,"user_version",|row|row.get(0))?;
-            if schema>0 && schema<4 {
+            if schema>0 && schema<ledger::SCHEMA_VERSION {
                 data_tools::snapshot(&connection).map_err(std::io::Error::other)?;
             }
             ledger::migrate(&mut connection)?;
@@ -45,10 +51,28 @@ fn main() {
             ,data_tools::restore_backup
             ,catalog::list_catalog
             ,catalog::save_catalog_item
+            ,catalog::merge_catalog
             ,catalog::list_titles
             ,data_tools::import_catalog
+            ,data_tools::preview_import_rows
+            ,data_tools::list_imports
             ,table_tools::save_grid
             ,table_tools::trash_grid
+            ,features::list_features
+            ,features::save_feature
+            ,features::feature_history
+            ,details::get_details
+            ,details::save_details
+            ,complex::create_refund
+            ,complex::create_installments
+            ,complex::list_installments
+            ,recurrence::list_occurrences
+            ,recurrence::record_occurrences
+            ,recurrence::split_recurrence
+            ,backups::automatic_backup
+            ,files::save_export
+            ,files::export_database
+            ,files::import_backup
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch Gestion financière");

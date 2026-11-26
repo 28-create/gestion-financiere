@@ -14,10 +14,18 @@ import {FinanceOverview} from './FinanceOverview.tsx';
 import {LedgerTable} from './LedgerTable.tsx';
 import {financeCopy} from './financeCopy.ts';
 import {gridCopy} from './gridCopy.ts';
+import {FeatureWorkspace} from './FeatureWorkspace.tsx';
+import {moduleCopy} from './moduleCopy.ts';
+import {classificationSuggestions,type Feature} from './domain/features.ts';
+import {DetailsEditor} from './DetailsEditor.tsx';
+import {RecurrenceEngine,RecurrencePanel} from './RecurrencePanel.tsx';
+import {Installments} from './Installments.tsx';
+import {Settings,readSettings} from './Settings.tsx';
+import type {ReportRow} from './domain/reports.ts';
 
 type Kind = "income" | "expense";
 type Status = "realized" | "planned" | "pending";
-type View = "journal" | Kind | "trash" | "analysis" | "catalog" | "dashboard" | "comparison" | "trends";
+type View = "journal" | Kind | "trash" | "analysis" | "catalog" | "dashboard" | "comparison" | "trends" | "budget" | "recurrence" | "project" | "tag" | "template" | "classification" | "settings" | "installments";
 type Details = { category: string | null; paymentMethod: string | null; note: string | null };
 type Input = Details & { title: string; kind: Kind; status: Status; occurredOn: string; amountMicros: string };
 type Entry = Input & { id: number; revision: number };
@@ -54,7 +62,17 @@ function App() {
   const [titles,setTitles]=useState<string[]>([]);
   const [suggestionError,setSuggestionError]=useState(false);
   const [gridDirty,setGridDirty]=useState(false);
-  const t = {...translations[language],dashboard:financeCopy[language].dashboard,comparison:financeCopy[language].comparison,trends:financeCopy[language].trends,analysis:language==='fr'?'Analyses':language==='he'?'ניתוח':'Analysis',catalog:language==='fr'?'Catégories et paiements':language==='he'?'קטגוריות ותשלומים':'Categories and payments'};
+  const [features,setFeatures]=useState<Feature[]>([]);
+  const [featureError,setFeatureError]=useState(false);
+  const [detailRow,setDetailRow]=useState<ReportRow>();
+  const [automationError,setAutomationError]=useState('');
+  const [backupInfo,setBackupInfo]=useState<{date?:string|null;error?:string|null;path?:string|null}>();
+  const [collapsed,setCollapsed]=useState(localStorage.getItem('sidebar.collapsed')==='true');
+  const settings=readSettings(features);
+  const t = {...moduleCopy[language],...translations[language],dashboard:financeCopy[language].dashboard,comparison:financeCopy[language].comparison,trends:financeCopy[language].trends,analysis:language==='fr'?'Analyses':language==='he'?'ניתוח':'Analysis',catalog:language==='fr'?'Catégories et paiements':language==='he'?'קטגוריות ותשלומים':'Categories and payments',installments:language==='fr'?'Paiements fractionnés':language==='he'?'תשלומים':'Installments'};
+  useEffect(()=>{let active=true;invoke<Feature[]>('list_features',{kind:null}).then(items=>{if(active){setFeatures(items);setFeatureError(false);}}).catch(()=>{if(active)setFeatureError(true);});return()=>{active=false;};},[version]);
+  const settingsRevision=features.find(f=>f.kind==='settings'&&f.name==='general')?.revision;
+  useEffect(()=>{let active=true;const backup=()=>{void invoke<{date:string|null;error:string|null;path:string|null}>('automatic_backup',{force:false}).then(info=>{if(active)setBackupInfo(info);}).catch(()=>{if(active)setBackupInfo({error:'backup'});});};backup();const timer=setInterval(backup,3600000);return()=>{active=false;clearInterval(timer);};},[settingsRevision]);
 
   useEffect(()=>{
     let active=true;setSuggestionError(false);
@@ -116,6 +134,10 @@ function App() {
     });
   }
 
+  function useTemplate(feature:Feature){
+    if((editor?.title||editor?.amount)&&!window.confirm(t.edit+' ?'))return;
+    const p=feature.payload;const kind=p.kind==='income'?'income':'expense';setView(kind);setEditor({title:String(p.title||feature.name),kind,status:(p.status as Status)||'realized',occurredOn:day(),amount:p.amountMicros?decimalAmount(BigInt(String(p.amountMicros))):'',category:String(p.category??'')||null,paymentMethod:String(p.paymentMethod??'')||null,note:String(p.note??'')||null});
+  }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const continuing=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-continue')==='true';
@@ -166,10 +188,12 @@ function App() {
   const visible = loading ? undefined : data;
 
   return (
-    <div className="app">
+    <div className={'app'+(collapsed?' nav-collapsed':'')}>
+      <RecurrenceEngine features={features} enabled={Boolean(settings.modules.recurrence)} paused={settings.automationPaused} version={version} onChange={()=>setVersion(v=>v+1)} onError={setAutomationError}/>
       <header className="topbar">
         <strong>{t.app}</strong>
         <div className="settings">
+          <span className="backup-indicator" title={backupInfo?.path??''}>{backupInfo?.error?(language==='fr'?'Sauvegarde à vérifier':language==='he'?'בדקו את הגיבוי':'Check backups'):backupInfo?.date?(language==='fr'?'Sauvegarde : ':language==='he'?'גיבוי: ':'Backup: ')+backupInfo.date:''}</span>
           <select aria-label={t.language} value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
             <option value="fr">Français</option><option value="en">English</option><option value="he">עברית</option>
           </select>
@@ -179,18 +203,19 @@ function App() {
         </div>
       </header>
       <main>
-        <DataTools disabled={saving||gridDirty||Boolean(editor)} onChange={() => setVersion(value => value + 1)} />
-        <nav aria-label={t.journal}>
-          {(["dashboard", "journal", "income", "expense", "comparison", "trends", "analysis", "catalog", "trash"] as const).map((target) => (
+        <nav className="side-nav" aria-label={t.journal}>
+          <button className="nav-toggle" aria-expanded={!collapsed} onClick={()=>{setCollapsed(!collapsed);localStorage.setItem('sidebar.collapsed',String(!collapsed));}}>{collapsed?'☰':language==='fr'?'Réduire le menu':language==='he'?'צמצום תפריט':'Collapse menu'}</button>
+          {(["dashboard", "journal", "income", "expense", "comparison", "trends", "analysis", "catalog", ...(['budget','recurrence','project','tag','template','classification','installments'] as const).filter(key=>settings.modules[key]),"trash","settings"] as View[]).map((target) => (
             <button key={target} aria-current={view === target ? "page" : undefined} onClick={() => {
               if(target===view)return;
-              if(gridDirty&&!window.confirm(gridCopy[language].discardConfirm))return;
-              setGridDirty(false);setHistoryId(undefined);
+              if((gridDirty||editor||detailRow)&&!window.confirm(gridCopy[language].discardConfirm))return;
+              setGridDirty(false);setHistoryId(undefined);setDetailRow(undefined);
               setView(target); setPage(0); setEditor(undefined); setWriteError(undefined);
-            }} disabled={saving}>{t[target]}</button>
+            }} disabled={saving} title={t[target]} aria-label={t[target]}><span className="nav-symbol" aria-hidden="true">{target==='dashboard'?'◈':target==='settings'?'⚙':target==='recurrence'?'◷':target==='income'?'+':target==='expense'?'−':'▤'}</span><span className="nav-text">{t[target]}</span></button>
           ))}
         </nav>
-        {view==='dashboard'||view==='comparison'||view==='trends'?<FinanceOverview key={view} mode={view} language={language} version={version} catalog={catalog}/>:view==='catalog'?<Catalog language={language} version={version} onChange={()=>setVersion(n=>n+1)}/>:view==='analysis'?<><div className="filters surface"><label>{t.from}<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>{t.to}<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label><label>{t.search}<input type="search" value={search} maxLength={200} onChange={e=>setSearch(e.target.value)}/></label></div><Reports from={from} to={to} search={search} version={version} language={language}/></>:<>
+        {featureError&&<p className="error" role="alert">{t.error}</p>}
+        {view==='settings'?<Settings features={features} language={language} theme={theme} onLanguage={setLanguage} onTheme={setTheme} onChange={()=>setVersion(n=>n+1)} automationError={automationError}/>:view==='installments'?<Installments language={language} version={version} catalog={catalog} onChange={()=>setVersion(n=>n+1)}/>:view==='budget'||view==='recurrence'||view==='project'||view==='tag'||view==='template'||view==='classification'?<><FeatureWorkspace key={view} kind={view} language={language} features={features} catalog={catalog} version={version} onChange={()=>setVersion(n=>n+1)} onUseTemplate={useTemplate}/>{view==='recurrence'&&<RecurrencePanel features={features} language={language} version={version} onChange={()=>setVersion(n=>n+1)}/>}</>:view==='dashboard'||view==='comparison'||view==='trends'?<FinanceOverview key={view} mode={view} language={language} version={version} catalog={catalog}/>:view==='catalog'?<Catalog language={language} version={version} onChange={()=>setVersion(n=>n+1)}/>:view==='analysis'?<><div className="filters surface"><label>{t.from}<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>{t.to}<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label><label>{t.search}<input type="search" value={search} maxLength={200} onChange={e=>setSearch(e.target.value)}/></label></div><Reports from={from} to={to} search={search} version={version} language={language}/></>:<>
         <div className="page-title">
           <h1>{t[view]}</h1>
           {view !== "trash" && !editor && <div className="row-actions">
@@ -201,6 +226,7 @@ function App() {
         {editor && (
           <form className="editor surface" onSubmit={save}>
             <h2>{editor.saved ? t.edit : editor.kind === "income" ? t.addIncome : t.addExpense}</h2>
+            {!editor.saved&&settings.modules.template&&features.some(f=>f.kind==='template'&&!f.archived&&f.payload.kind===editor.kind)&&<label>{t.template}<select value="" onChange={e=>{const feature=features.find(f=>f.id===Number(e.target.value));if(feature)useTemplate(feature);}}><option value="">—</option>{features.filter(f=>f.kind==='template'&&!f.archived&&f.payload.kind===editor.kind).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>}
             <div className="fields">
               <label>{t.title}<input autoFocus required list="transaction-titles" maxLength={200} value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} /></label>
               <datalist id="transaction-titles">{titles.map(title=><option value={title} key={title}/>)}</datalist>
@@ -214,6 +240,7 @@ function App() {
                 <label>{t.category}<input list="transaction-categories" value={editor.category ?? ""} onChange={(e) => setEditor({ ...editor, category: e.target.value })} /></label>
                 <label>{t.paymentMethod}<input list="transaction-payments" value={editor.paymentMethod ?? ""} onChange={(e) => setEditor({ ...editor, paymentMethod: e.target.value })} /></label>
             </div>
+            {settings.modules.classification&&classificationSuggestions(editor.title,editor.kind,features).slice(0,3).map(rule=><button type="button" className="suggestion" key={rule.id} onClick={()=>setEditor({...editor,category:String(rule.payload.category||editor.category||'')||null,paymentMethod:String(rule.payload.paymentMethod||editor.paymentMethod||'')||null})}>{rule.name} · {String(rule.payload.category||rule.payload.paymentMethod||'')}</button>)}
             <datalist id="transaction-categories">{availableItems(catalog,editor.kind).map(item=><option key={item.id} value={item.name}/>)}</datalist>
             <datalist id="transaction-payments">{availableItems(catalog,'payment').map(item=><option key={item.id} value={item.name}/>)}</datalist>
             {suggestionError&&<p role="status">{language==='fr'?'Les suggestions sont indisponibles. La saisie manuelle reste possible.':language==='he'?'ההצעות אינן זמינות. ניתן להזין ערכים ידנית.':'Suggestions are unavailable. You can still enter values manually.'}</p>}
@@ -238,12 +265,13 @@ function App() {
         )}
         {writeError && <p className="error" role="alert">{t[writeError]}</p>}
         {historyId!==undefined&&<History id={historyId} language={language} onClose={()=>setHistoryId(undefined)}/>}
+        {detailRow&&<DetailsEditor row={detailRow} language={language} features={features} catalog={catalog} onClose={()=>setDetailRow(undefined)} onChange={()=>setVersion(n=>n+1)}/>}
         <div className="filters surface">
           <label>{t.from}<input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} /></label>
           <label>{t.to}<input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} /></label>
           <label>{t.search}<input type="search" maxLength={200} value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} /></label>
         </div>
-        {view!=='trash'&&<LedgerTable key={view} from={from} to={to} search={search} kind={view==='income'||view==='expense'?view:undefined} language={language} version={version} catalog={catalog} disabled={saving||Boolean(editor)} onChange={()=>setVersion(n=>n+1)} onDirty={setGridDirty} onBusy={setSaving} onHistory={setHistoryId} onEdit={row=>openEditor({...row,revision:row.revision!,kind:row.kind as Kind,status:row.status as Status})}/>}
+        {view!=='trash'&&<LedgerTable key={view} from={from} to={to} search={search} kind={view==='income'||view==='expense'?view:undefined} language={language} version={version} catalog={catalog} disabled={saving||Boolean(editor)||Boolean(detailRow)} onChange={()=>setVersion(n=>n+1)} onDirty={setGridDirty} onBusy={setSaving} onHistory={setHistoryId} onDetails={setDetailRow} onEdit={row=>openEditor({...row,revision:row.revision!,kind:row.kind as Kind,status:row.status as Status})}/>}
         {view==='trash'&&readError && <p className="error" role="alert">{t[readError]}</p>}
         {view==='trash'&&loading && <p role="status">{t.working}</p>}
         {view==='trash'&&visible && <section className="surface ledger">
