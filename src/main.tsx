@@ -18,7 +18,7 @@ import {FeatureWorkspace} from './FeatureWorkspace.tsx';
 import {moduleCopy} from './moduleCopy.ts';
 import {classificationSuggestions,type Feature} from './domain/features.ts';
 import {DetailsEditor} from './DetailsEditor.tsx';
-import {RecurrenceEngine,RecurrencePanel} from './RecurrencePanel.tsx';
+import {RecurrenceEngine,RecurrencePanel,RecurrenceReminders} from './RecurrencePanel.tsx';
 import {Installments} from './Installments.tsx';
 import {Settings,readSettings} from './Settings.tsx';
 import type {ReportRow} from './domain/reports.ts';
@@ -57,6 +57,7 @@ function App() {
   const [writeError, setWriteError] = useState<"amountError" | "error" | "conflict">();
   const [editor, setEditor] = useState<Editor>();
   const [saving, setSaving] = useState(false);
+  const [habit,setHabit]=useState<{category:string|null;paymentMethod:string|null}>();
   const [historyId,setHistoryId]=useState<number>();
   const [catalog,setCatalog]=useState<CatalogItem[]>([]);
   const [titles,setTitles]=useState<string[]>([]);
@@ -138,6 +139,8 @@ function App() {
     if((editor?.title||editor?.amount)&&!window.confirm(t.edit+' ?'))return;
     const p=feature.payload;const kind=p.kind==='income'?'income':'expense';setView(kind);setEditor({title:String(p.title||feature.name),kind,status:(p.status as Status)||'realized',occurredOn:day(),amount:p.amountMicros?decimalAmount(BigInt(String(p.amountMicros))):'',category:String(p.category??'')||null,paymentMethod:String(p.paymentMethod??'')||null,note:String(p.note??'')||null});
   }
+  useEffect(()=>{let active=true;setHabit(undefined);if(!editor?.title||!settings.modules.classification)return;const timer=setTimeout(()=>{invoke<{category:string|null;paymentMethod:string|null}|null>('title_habit',{title:editor.title,kind:editor.kind}).then(h=>{if(active&&h)setHabit(h);}).catch(()=>{});},200);return()=>{active=false;clearTimeout(timer);};},[editor?.title,editor?.kind,settings.modules.classification,version]);
+  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if(saving||gridDirty)return;if(e.ctrlKey&&e.shiftKey&&(e.code==='KeyE'||e.code==='KeyR')){e.preventDefault();if(editor&&!window.confirm(gridCopy[language].discardConfirm))return;const kind=e.code==='KeyR'?'income':'expense';setView(kind);openEditor(undefined,kind);}if(e.ctrlKey&&e.code==='KeyF'){e.preventDefault();document.getElementById('global-search')?.focus();}};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[saving,gridDirty,editor,language,view]);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const continuing=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-continue')==='true';
@@ -191,7 +194,7 @@ function App() {
     <div className={'app'+(collapsed?' nav-collapsed':'')}>
       <RecurrenceEngine features={features} enabled={Boolean(settings.modules.recurrence)} paused={settings.automationPaused} version={version} onChange={()=>setVersion(v=>v+1)} onError={setAutomationError}/>
       <header className="topbar">
-        <strong>{t.app}</strong>
+        <strong>{t.app}</strong><label className="global-search">{t.search}<input id="global-search" type="search" maxLength={200} disabled={saving||gridDirty||!!editor||!!detailRow} value={search} onChange={e=>{setSearch(e.target.value);setFrom('0001-01-01');setTo('9999-12-31');setView('journal');}}/></label>
         <div className="settings">
           <span className="backup-indicator" title={backupInfo?.path??''}>{backupInfo?.error?(language==='fr'?'Sauvegarde à vérifier':language==='he'?'בדקו את הגיבוי':'Check backups'):backupInfo?.date?(language==='fr'?'Sauvegarde : ':language==='he'?'גיבוי: ':'Backup: ')+backupInfo.date:''}</span>
           <select aria-label={t.language} value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
@@ -202,6 +205,7 @@ function App() {
           </select>
         </div>
       </header>
+      <RecurrenceReminders features={features} enabled={Boolean(settings.modules.recurrence)} language={language} version={version} onOpen={()=>{if((gridDirty||editor||detailRow)&&!window.confirm(gridCopy[language].discardConfirm))return;setEditor(undefined);setDetailRow(undefined);setGridDirty(false);setView('recurrence');}}/>
       <main>
         <nav className="side-nav" aria-label={t.journal}>
           <button className="nav-toggle" aria-expanded={!collapsed} onClick={()=>{setCollapsed(!collapsed);localStorage.setItem('sidebar.collapsed',String(!collapsed));}}>{collapsed?'☰':language==='fr'?'Réduire le menu':language==='he'?'צמצום תפריט':'Collapse menu'}</button>
@@ -227,6 +231,7 @@ function App() {
           <form className="editor surface" onSubmit={save}>
             <h2>{editor.saved ? t.edit : editor.kind === "income" ? t.addIncome : t.addExpense}</h2>
             {!editor.saved&&settings.modules.template&&features.some(f=>f.kind==='template'&&!f.archived&&f.payload.kind===editor.kind)&&<label>{t.template}<select value="" onChange={e=>{const feature=features.find(f=>f.id===Number(e.target.value));if(feature)useTemplate(feature);}}><option value="">—</option>{features.filter(f=>f.kind==='template'&&!f.archived&&f.payload.kind===editor.kind).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>}
+            {habit&&<div className="classification-suggestions"><span>{language==='fr'?'Habitude pour ce titre':language==='he'?'הרגל עבור תיאור זה':'Habit for this title'}: </span><button type="button" onClick={()=>setEditor({...editor,category:habit.category,paymentMethod:habit.paymentMethod})}><bdi>{[habit.category,habit.paymentMethod].filter(Boolean).join(' · ')}</bdi></button></div>}
             <div className="fields">
               <label>{t.title}<input autoFocus required list="transaction-titles" maxLength={200} value={editor.title} onChange={(e) => setEditor({ ...editor, title: e.target.value })} /></label>
               <datalist id="transaction-titles">{titles.map(title=><option value={title} key={title}/>)}</datalist>
@@ -264,7 +269,7 @@ function App() {
           </form>
         )}
         {writeError && <p className="error" role="alert">{t[writeError]}</p>}
-        {historyId!==undefined&&<History id={historyId} language={language} onClose={()=>setHistoryId(undefined)}/>}
+        {historyId!==undefined&&<History onChange={()=>setVersion(v=>v+1)} id={historyId} language={language} onClose={()=>setHistoryId(undefined)}/>}
         {detailRow&&<DetailsEditor row={detailRow} language={language} features={features} catalog={catalog} onClose={()=>setDetailRow(undefined)} onChange={()=>setVersion(n=>n+1)}/>}
         <div className="filters surface">
           <label>{t.from}<input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} /></label>
@@ -287,7 +292,7 @@ function App() {
                 <td>{t[entry.kind]}</td><td><span className={"status " + entry.status}>{t[entry.status]}</span></td>
                 <td className="numeric"><bdi>{currency(BigInt(entry.amountMicros))}</bdi></td>
                 <td><div className="row-actions"><button onClick={()=>setHistoryId(entry.id)}>{language==='fr'?'Historique':language==='he'?'היסטוריה':'History'}</button>{view === "trash"
-                  ? <button disabled={saving || !!editor} onClick={() => void toggleDeleted(entry)}>{t.restore}</button>
+                  ? <><button disabled={saving || !!editor} onClick={() => void toggleDeleted(entry)}>{t.restore}</button><button className="danger" disabled={saving||!!editor} onClick={()=>{if(!window.confirm(language==='fr'?'Supprimer définitivement cette opération et son historique ? Une sauvegarde sera conservée.':language==='he'?'למחוק לצמיתות פעולה זו וההיסטוריה שלה? יישמר גיבוי.':'Permanently delete this transaction and its history? A backup will be retained.'))return;setSaving(true);void invoke('purge_transactions',{rows:[{id:entry.id,revision:entry.revision}]}).then(()=>setVersion(v=>v+1)).catch(()=>setWriteError('error')).finally(()=>setSaving(false));}}>{language==='fr'?'Supprimer définitivement':language==='he'?'מחיקה לצמיתות':'Delete permanently'}</button></>
                   : <><button disabled={saving || !!editor} onClick={() => openEditor(entry)}>{t.edit}</button>
                     <button disabled={saving||!!editor} onClick={()=>{openEditor(entry);setEditor(current=>current?{...current,saved:undefined}:current);}}>{language==='fr'?'Dupliquer':language==='he'?'שכפול':'Duplicate'}</button>
                     <button disabled={saving || !!editor} onClick={() => void toggleDeleted(entry)}>{t.remove}</button></>}

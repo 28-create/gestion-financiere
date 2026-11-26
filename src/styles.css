@@ -150,3 +150,4 @@ tbody tr:nth-child(even) { background: var(--muted); }
  .surface { break-inside:avoid; }
  th { position:static; }
 }
+.financial-calendar{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0}.financial-calendar section{padding:16px}.context-menu{display:flex;flex-direction:column;gap:4px;padding:8px;min-width:210px;box-shadow:0 12px 40px #0003}.context-menu button{text-align:start}.individual-reminders{margin:8px 20px;padding:14px}.global-search{display:flex;align-items:center;gap:8px;max-width:340px}.global-search input{min-width:120px;width:100%}.grid-scroll textarea{min-width:150px;max-width:400px} .classification-suggestions{padding:10px 0}

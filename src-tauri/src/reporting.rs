@@ -29,3 +29,9 @@ pub fn transaction_history(database:State<'_,Mutex<Connection>>,id:i64)->Result<
  let rows=stmt.query_map([id],|r|Ok(HistoryRow{revision:r.get(0)?,title:r.get(1)?,kind:r.get(2)?,status:r.get(3)?,occurred_on:r.get(4)?,amount_micros:r.get::<_,i64>(5)?.to_string(),category:r.get(6)?,payment_method:r.get(7)?,note:r.get(8)?,deleted_at:r.get(9)?,recorded_at:r.get(10)?})).map_err(|_|"database")?;
  rows.collect::<rusqlite::Result<Vec<_>>>().map_err(|_|"database".into())
 }
+#[tauri::command]
+pub fn restore_revision(database:State<'_,Mutex<Connection>>,id:i64,revision:i64,target_revision:i64)->Result<(),String>{
+ let mut db=database.lock().map_err(|_|"database")?;crate::data_tools::snapshot(&db)?;let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|_|"database")?;
+ let input=tx.query_row("SELECT title,kind,status,occurred_on,amount_micros,category,payment_method,note FROM transaction_history WHERE transaction_id=?1 AND revision=?2",[id,target_revision],|r|Ok(crate::ledger::EntryInput{title:r.get(0)?,kind:r.get(1)?,status:r.get(2)?,occurred_on:r.get(3)?,amount_micros:r.get::<_,i64>(4)?.to_string(),category:r.get(5)?,payment_method:r.get(6)?,note:r.get(7)?})).map_err(|_|"history")?;
+ let amount=crate::ledger::validate_input(&input).map_err(str::to_string)?;crate::ledger::write_transaction(&tx,&input,Some(id),Some(revision),amount,&input.title).map_err(str::to_string)?;crate::complex::validate_visibility(&tx)?;tx.commit().map_err(|_|"database".into())
+}

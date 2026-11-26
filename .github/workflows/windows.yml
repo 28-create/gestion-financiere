@@ -16,11 +16,25 @@ jobs:
         with:
           node-version: 24
       - run: rustup default stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-finance-rust-${{ hashFiles('src-tauri/Cargo.toml') }}
       - run: npm install
       - run: python -m pip install openpyxl==3.1.5
       - run: npm test
       - run: npm run build
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-lockfiles
+          path: |
+            package-lock.json
+            src-tauri/Cargo.lock
+          if-no-files-found: error
       - run: python -B -m unittest discover -s tests -p test_audit_excel.py
       - run: npm run tauri -- build --no-bundle
       - uses: actions/upload-artifact@v4

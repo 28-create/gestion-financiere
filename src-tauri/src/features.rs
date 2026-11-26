@@ -21,6 +21,9 @@ pub(crate) fn validate(kind:&str,payload:&Value)->Result<()>{
    let interval=payload["interval"].as_i64().ok_or("recurrence")?;if !(1..=120).contains(&interval){return Err("recurrence".into());}
    if let Some(count)=payload["count"].as_i64(){if !(1..=1000000).contains(&count){return Err("recurrence".into());}}
    if let Some(effective)=payload["effectiveFrom"].as_str(){date(effective)?;}
+   if let Some(policy)=payload["policy"].as_str(){if !matches!(policy,"fixed"|"last"|"firstBusiness"|"lastBusiness"|"weekday"){return Err("recurrence".into());}}
+   if payload["policy"].as_str()==Some("weekday"){let weekday=payload["weekday"].as_i64().ok_or("recurrence")?;let ordinal=payload["ordinal"].as_i64().ok_or("recurrence")?;if !(0..=6).contains(&weekday)||![-1,1,2,3,4,5].contains(&ordinal){return Err("recurrence".into());}}
+   if let Some(exceptions)=payload["exceptions"].as_array(){if exceptions.len()>10000{return Err("size".into());}let mut dates=std::collections::HashSet::new();for exception in exceptions{let on=text(exception,"on")?;date(on)?;if !dates.insert(on){return Err("recurrence".into());}if let Some(when)=exception["date"].as_str(){date(when)?;}if !exception["amountMicros"].is_null(){amount(exception,"amountMicros")?;}}}
    if let Some(until)=payload["until"].as_str(){if !until.is_empty(){date(until)?;if until<text(payload,"start")?{return Err("recurrence".into());}}}
   },
   "classification"=>{let needle=text(payload,"match")?;if needle.chars().count()<3||!matches!(text(payload,"mode")?,"exact"|"contains"){return Err("rule".into());}},

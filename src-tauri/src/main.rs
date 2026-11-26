@@ -47,28 +47,34 @@ fn main() {
             data_tools::undo_import
             ,reporting::report_rows
             ,reporting::transaction_history
+            ,reporting::restore_revision
             ,data_tools::list_backups
             ,data_tools::restore_backup
             ,catalog::list_catalog
             ,catalog::save_catalog_item
             ,catalog::merge_catalog
             ,catalog::list_titles
+            ,catalog::title_habit
             ,data_tools::import_catalog
             ,data_tools::preview_import_rows
             ,data_tools::list_imports
             ,table_tools::save_grid
             ,table_tools::trash_grid
+            ,table_tools::purge_transactions
             ,features::list_features
             ,features::save_feature
             ,features::feature_history
             ,details::get_details
             ,details::save_details
             ,complex::create_refund
+            ,complex::refund_summary
+            ,complex::installment_rows
             ,complex::create_installments
             ,complex::list_installments
             ,recurrence::list_occurrences
             ,recurrence::record_occurrences
             ,recurrence::split_recurrence
+            ,recurrence::link_occurrence
             ,backups::automatic_backup
             ,files::save_export
             ,files::export_database

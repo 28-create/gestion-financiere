@@ -34,3 +34,4 @@ export function sortGridRows(rows:ReportRow[],field:keyof ReportRow,direction:'a
  return [...rows].sort((a,b)=>{let n=0;if(field==='amountMicros'){const x=BigInt(a.amountMicros),y=BigInt(b.amountMicros);n=x<y?-1:x>y?1:0;}else n=String(a[field]??'').localeCompare(String(b[field]??''));return (direction==='asc'?n:-n)||a.id-b.id;});
 }
 export function matchesColumn(value:string|null,filter:string){if(!filter)return true;try{return (value||null)===JSON.parse(filter);}catch{return false;}}
+export function sortGridMulti(rows:ReportRow[],sorts:{field:keyof ReportRow;direction:'asc'|'desc'}[]){return [...rows].sort((a,b)=>{for(const {field,direction} of sorts){const x=field==='amountMicros'?BigInt(a.amountMicros):String(a[field]??''),y=field==='amountMicros'?BigInt(b.amountMicros):String(b[field]??'');const n=typeof x==='bigint'&&typeof y==='bigint'?(x<y?-1:x>y?1:0):String(x).localeCompare(String(y));if(n)return direction==='asc'?n:-n;}return a.id-b.id;});}

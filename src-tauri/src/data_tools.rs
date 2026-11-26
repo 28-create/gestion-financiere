@@ -23,7 +23,7 @@ fn validate(row: &Row) -> Result<i64> {
  if date.to_string()!=row.occurred_on || row.occurred_on.starts_with("0000") {return Err("date".into());}
  let amount=row.amount_micros.parse::<i64>().map_err(err)?;
  if row.source_key.as_ref().is_some_and(|s|s.len()>4000)||row.source_row.is_some_and(|n|n<1){return Err("source".into());}
- if let Some(currency)=&row.currency{if currency.len()!=3||!currency.bytes().all(|b|b.is_ascii_uppercase()){return Err("currency".into());}if currency!="ILS"{let original=row.original_micros.as_ref().ok_or("currency")?.parse::<i64>().map_err(|_|"amount")?;let rate=row.rate_micros.as_ref().ok_or("rate")?.parse::<i64>().map_err(|_|"rate")?;if crate::details::converted(original,rate)?!=amount{return Err("currency".into());}crate::features::date(row.rate_date.as_deref().ok_or("date")?)?;}}
+ if let Some(currency)=&row.currency{if currency.len()!=3||!currency.bytes().all(|b|b.is_ascii_uppercase()){return Err("currency".into());}if currency!="ILS"{let original=row.original_micros.as_ref().ok_or("currency")?.parse::<i64>().map_err(|_|"amount")?;if !(-999_999_999_999_999..=999_999_999_999_999).contains(&original){return Err("amount".into());}let rate=row.rate_micros.as_ref().ok_or("rate")?.parse::<i64>().map_err(|_|"rate")?;if crate::details::converted(original,rate)?!=amount{return Err("currency".into());}crate::features::date(row.rate_date.as_deref().ok_or("date")?)?;}}
  if !(-999_999_999_999_999..=999_999_999_999_999).contains(&amount) {return Err("amount".into());}
  Ok(amount)
 }
@@ -155,6 +155,7 @@ pub fn undo_import(database:Db<'_>, batch_id:i64) -> Result<()> {
  if changed {return Err("Des opérations du lot ont été modifiées. Annulation refusée pour préserver ces modifications.".into());}
  if tx.execute("UPDATE import_batches SET undone_at=CURRENT_TIMESTAMP WHERE id=?1 AND undone_at IS NULL",[batch_id]).map_err(err)?!=1 {return Err("batch".into());}
  tx.execute("UPDATE transactions SET deleted_at=CURRENT_TIMESTAMP, revision=revision+1, updated_at=CURRENT_TIMESTAMP WHERE import_batch_id=?1 AND deleted_at IS NULL",[batch_id]).map_err(err)?;
+ crate::complex::validate_visibility(&tx)?;
  tx.commit().map_err(err)
 }
 

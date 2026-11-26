@@ -36,6 +36,7 @@ CREATE TABLE transaction_details (
  nature TEXT CHECK(nature IS NULL OR nature IN ('fixed','variable')),
  necessity TEXT CHECK(necessity IS NULL OR necessity IN ('essential','optional'))
 ) STRICT;
+CREATE UNIQUE INDEX one_transaction_occurrence ON recurring_occurrences(transaction_id) WHERE transaction_id IS NOT NULL;
 CREATE TABLE transaction_tags (
  transaction_id INTEGER NOT NULL REFERENCES transactions(id),tag_id INTEGER NOT NULL REFERENCES feature_items(id),
  PRIMARY KEY(transaction_id,tag_id)

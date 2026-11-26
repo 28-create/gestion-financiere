@@ -101,3 +101,10 @@ mod tests {
   let count:i64=db.query_row("SELECT count(*) FROM transactions",[],|r|r.get(0)).unwrap();assert_eq!(count,2);
  }
 }
+#[tauri::command]
+pub fn title_habit(database:tauri::State<'_,std::sync::Mutex<rusqlite::Connection>>,title:String,kind:String)->Result<Option<serde_json::Value>,String>{
+ if title.trim().is_empty()||title.chars().count()>200||!matches!(kind.as_str(),"income"|"expense"){return Ok(None);}
+ let db=database.lock().map_err(|_|"database")?;
+ use rusqlite::OptionalExtension;
+ db.query_row("SELECT category,payment_method FROM transactions WHERE title=?1 COLLATE NOCASE AND kind=?2 AND deleted_at IS NULL AND (category IS NOT NULL OR payment_method IS NOT NULL) ORDER BY updated_at DESC,id DESC LIMIT 1",rusqlite::params![title.trim(),kind],|r|Ok(serde_json::json!({"category":r.get::<_,Option<String>>(0)?,"paymentMethod":r.get::<_,Option<String>>(1)?}))).optional().map_err(|_|"database".into())
+}

@@ -9,6 +9,20 @@ pub(crate) fn validate_visibility(db:&Connection)->Result<()>{
  let invalid:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM transaction_links l JOIN transactions t ON t.id=l.transaction_id JOIN transactions o ON o.id=l.original_id WHERE t.deleted_at IS NULL AND (o.deleted_at IS NOT NULL OR o.status<>'realized' OR t.status<>'realized'))",[],|r|r.get(0)).map_err(error)?;
  if invalid{return Err("refund_link".into());}Ok(())
 }
+#[tauri::command]
+pub fn refund_summary(database:State<'_,Mutex<Connection>>,id:i64)->Result<serde_json::Value>{
+ let db=database.lock().map_err(|_|"database")?;
+ let original:i64=db.query_row("SELECT coalesce((SELECT original_id FROM transaction_links WHERE transaction_id=?1),?1)",[id],|r|r.get(0)).map_err(error)?;
+ let (title,amount):(String,i64)=db.query_row("SELECT title,amount_micros FROM transactions WHERE id=?1",[original],|r|Ok((r.get(0)?,r.get(1)?))).map_err(error)?;
+ let mut statement=db.prepare("SELECT t.id,t.occurred_on,t.amount_micros,t.deleted_at IS NOT NULL FROM transaction_links l JOIN transactions t ON t.id=l.transaction_id WHERE l.original_id=?1 ORDER BY t.occurred_on,t.id").map_err(error)?;
+ let mut refunded=0_i128;let mut rows=vec![];for row in statement.query_map([original],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,bool>(3)?))).map_err(error)?{let(id,date,value,deleted)=row.map_err(error)?;if !deleted{refunded-=i128::from(value);}rows.push(serde_json::json!({"id":id,"date":date,"amountMicros":(-i128::from(value)).to_string(),"deleted":deleted}));}
+ Ok(serde_json::json!({"originalId":original,"title":title,"originalMicros":amount.to_string(),"refundedMicros":refunded.to_string(),"netMicros":(i128::from(amount)-refunded).to_string(),"rows":rows}))
+}
+#[tauri::command]
+pub fn installment_rows(database:State<'_,Mutex<Connection>>,id:i64)->Result<Vec<serde_json::Value>>{
+ let db=database.lock().map_err(|_|"database")?;let mut statement=db.prepare("SELECT id,revision,occurred_on,amount_micros,status,deleted_at IS NOT NULL FROM transactions WHERE installment_plan_id=?1 ORDER BY installment_position").map_err(error)?;
+ statement.query_map([id],|r|Ok(serde_json::json!({"id":r.get::<_,i64>(0)?,"revision":r.get::<_,i64>(1)?,"date":r.get::<_,String>(2)?,"amountMicros":r.get::<_,i64>(3)?.to_string(),"status":r.get::<_,String>(4)?,"deleted":r.get::<_,bool>(5)?}))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)
+}
 pub(crate) fn validate_links(db:&Connection,id:i64,kind:&str,amount:i64)->Result<()>{
  let link:Option<(i64,i64,String)>=db.query_row("SELECT l.original_id,o.amount_micros,o.kind FROM transaction_links l JOIN transactions o ON o.id=l.original_id WHERE l.transaction_id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(error)?;
  if let Some((original,total,original_kind))=link{let other:i64=db.query_row("SELECT coalesce(sum(-t.amount_micros),0) FROM transactions t JOIN transaction_links l ON l.transaction_id=t.id WHERE l.original_id=?1 AND t.id<>?2 AND t.deleted_at IS NULL",params![original,id],|r|r.get(0)).map_err(error)?;if kind!="expense"||original_kind!="expense"||amount>=0||i128::from(-amount)+i128::from(other)>i128::from(total){return Err("refund".into());}}

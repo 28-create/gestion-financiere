@@ -41,6 +41,20 @@ fn remove(db:&mut Connection,rows:&[Selection])->Result<(),String>{
 pub fn trash_grid(database:State<'_,Mutex<Connection>>,rows:Vec<Selection>)->Result<(),String>{
  let mut db=database.lock().map_err(|_|"database")?;crate::data_tools::snapshot(&db)?;remove(&mut db,&rows)
 }
+#[tauri::command]
+pub fn purge_transactions(database:State<'_,Mutex<Connection>>,rows:Vec<Selection>)->Result<(),String>{
+ if rows.is_empty()||rows.len()>1000{return Err("size".into());}let ids:HashSet<i64>=rows.iter().map(|r|r.id).collect();if ids.len()!=rows.len(){return Err("conflict".into());}
+ let mut db=database.lock().map_err(|_|"database")?;crate::data_tools::snapshot(&db)?;let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|_|"database")?;
+ for row in &rows{let valid:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM transactions WHERE id=?1 AND revision=?2 AND deleted_at IS NOT NULL)",[row.id,row.revision],|r|r.get(0)).map_err(|_|"database")?;if !valid{return Err("conflict".into());}
+  let mut statement=tx.prepare("SELECT transaction_id FROM transaction_links WHERE original_id=?1").map_err(|_|"database")?;let children=statement.query_map([row.id],|r|r.get::<_,i64>(0)).map_err(|_|"database")?;for child in children{if !ids.contains(&child.map_err(|_|"database")?){return Err("refund_link".into());}}
+ }
+ for row in &rows{tx.execute("DELETE FROM transaction_links WHERE transaction_id=?1",[row.id]).map_err(|_|"database")?;}
+ for row in &rows{
+  tx.execute("UPDATE recurring_occurrences SET transaction_id=NULL WHERE transaction_id=?1",[row.id]).map_err(|_|"database")?;
+  for table in ["transaction_history","detail_history","transaction_tags","transaction_splits","transaction_details"]{tx.execute(&format!("DELETE FROM {} WHERE transaction_id=?1",table),[row.id]).map_err(|_|"database")?;}
+  tx.execute("DELETE FROM transactions WHERE id=?1",[row.id]).map_err(|_|"database")?;
+ }tx.commit().map_err(|_|"database".into())
+}
 #[cfg(test)]
 mod tests{
  use super::*;
