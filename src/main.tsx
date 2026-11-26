@@ -143,6 +143,7 @@ function App() {
   useEffect(()=>{const handler=(e:KeyboardEvent)=>{if(saving||gridDirty)return;if(e.ctrlKey&&e.shiftKey&&(e.code==='KeyE'||e.code==='KeyR')){e.preventDefault();if(editor&&!window.confirm(gridCopy[language].discardConfirm))return;const kind=e.code==='KeyR'?'income':'expense';setView(kind);openEditor(undefined,kind);}if(e.ctrlKey&&e.code==='KeyF'){e.preventDefault();document.getElementById('global-search')?.focus();}};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[saving,gridDirty,editor,language,view]);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const detailed=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-details')==='true';
     const continuing=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-continue')==='true';
     if (!editor || saving) return;
     let amountMicros: string;
@@ -160,9 +161,10 @@ function App() {
         occurredOn: editor.occurredOn, amountMicros,
         category: editor.category || null, paymentMethod: editor.paymentMethod || null, note: editor.note || null,
       };
-      await invoke("save_transaction", {
+      const savedId=await invoke<number>("save_transaction", {
         input, id: editor.saved?.id ?? null, revision: editor.saved?.revision ?? null,
       });
+      if(detailed)setDetailRow({...input,id:savedId,revision:(editor.saved?.revision??0)+1});
       setEditor(continuing?{...editor,title:'',amount:'',note:null,saved:undefined}:undefined);
       setVersion((previous) => previous + 1);
     } catch (error) {
@@ -212,6 +214,7 @@ function App() {
           {(["dashboard", "journal", "income", "expense", "comparison", "trends", "analysis", "catalog", ...(['budget','recurrence','project','tag','template','classification','installments'] as const).filter(key=>settings.modules[key]),"trash","settings"] as View[]).map((target) => (
             <button key={target} aria-current={view === target ? "page" : undefined} onClick={() => {
               if(target===view)return;
+              if(!window.dispatchEvent(new Event('finance:navigate',{cancelable:true})))return;
               if((gridDirty||editor||detailRow)&&!window.confirm(gridCopy[language].discardConfirm))return;
               setGridDirty(false);setHistoryId(undefined);setDetailRow(undefined);
               setView(target); setPage(0); setEditor(undefined); setWriteError(undefined);
@@ -228,7 +231,7 @@ function App() {
           </div>}
         </div>
         {editor && (
-          <form className="editor surface" onSubmit={save}>
+          <form className="editor surface" onSubmit={save} onKeyDown={e=>{if(e.ctrlKey&&e.key==='Enter'){e.preventDefault();e.currentTarget.requestSubmit();}}}>
             <h2>{editor.saved ? t.edit : editor.kind === "income" ? t.addIncome : t.addExpense}</h2>
             {!editor.saved&&settings.modules.template&&features.some(f=>f.kind==='template'&&!f.archived&&f.payload.kind===editor.kind)&&<label>{t.template}<select value="" onChange={e=>{const feature=features.find(f=>f.id===Number(e.target.value));if(feature)useTemplate(feature);}}><option value="">—</option>{features.filter(f=>f.kind==='template'&&!f.archived&&f.payload.kind===editor.kind).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>}
             {habit&&<div className="classification-suggestions"><span>{language==='fr'?'Habitude pour ce titre':language==='he'?'הרגל עבור תיאור זה':'Habit for this title'}: </span><button type="button" onClick={()=>setEditor({...editor,category:habit.category,paymentMethod:habit.paymentMethod})}><bdi>{[habit.category,habit.paymentMethod].filter(Boolean).join(' · ')}</bdi></button></div>}
@@ -264,6 +267,7 @@ function App() {
               <span className="spacer" />
               <button type="button" disabled={saving} onClick={() => { setEditor(undefined); setWriteError(undefined); }}>{t.cancel}</button>
               <button className="primary" disabled={saving}>{t.save}</button>
+              <button data-details="true" disabled={saving}>{language==='fr'?'Enregistrer et ouvrir les détails':language==='he'?'שמירה ופתיחת פרטים':'Save and open details'}</button>
               <button data-continue="true" disabled={saving}>{language==='fr'?'Enregistrer et continuer':language==='he'?'שמירה והמשך':'Save and continue'}</button>
             </div>
           </form>

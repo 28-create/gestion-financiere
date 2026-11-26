@@ -21,7 +21,7 @@ pub fn refund_summary(database:State<'_,Mutex<Connection>>,id:i64)->Result<serde
 #[tauri::command]
 pub fn installment_rows(database:State<'_,Mutex<Connection>>,id:i64)->Result<Vec<serde_json::Value>>{
  let db=database.lock().map_err(|_|"database")?;let mut statement=db.prepare("SELECT id,revision,occurred_on,amount_micros,status,deleted_at IS NOT NULL FROM transactions WHERE installment_plan_id=?1 ORDER BY installment_position").map_err(error)?;
- statement.query_map([id],|r|Ok(serde_json::json!({"id":r.get::<_,i64>(0)?,"revision":r.get::<_,i64>(1)?,"date":r.get::<_,String>(2)?,"amountMicros":r.get::<_,i64>(3)?.to_string(),"status":r.get::<_,String>(4)?,"deleted":r.get::<_,bool>(5)?}))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)
+ let rows=statement.query_map([id],|r|Ok(serde_json::json!({"id":r.get::<_,i64>(0)?,"revision":r.get::<_,i64>(1)?,"date":r.get::<_,String>(2)?,"amountMicros":r.get::<_,i64>(3)?.to_string(),"status":r.get::<_,String>(4)?,"deleted":r.get::<_,bool>(5)?}))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error);rows
 }
 pub(crate) fn validate_links(db:&Connection,id:i64,kind:&str,amount:i64)->Result<()>{
  let link:Option<(i64,i64,String)>=db.query_row("SELECT l.original_id,o.amount_micros,o.kind FROM transaction_links l JOIN transactions o ON o.id=l.original_id WHERE l.transaction_id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(error)?;

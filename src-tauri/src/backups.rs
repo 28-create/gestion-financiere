@@ -1,5 +1,5 @@
 use std::{fs,path::{Path,PathBuf},sync::Mutex};
-use rusqlite::{params,Connection,OptionalExtension};
+use rusqlite::{Connection,OptionalExtension};
 use serde::Serialize;
 use serde_json::{Value,json};
 use tauri::Manager;
@@ -16,11 +16,11 @@ pub(crate) fn run(db:&Connection,force:bool)->Result<BackupInfo>{
  let stored:Option<String>=db.query_row("SELECT value FROM app_metadata WHERE key='last_backup'",[],|r|r.get(0)).optional().map_err(error)?;
  let old:Value=stored.and_then(|s|serde_json::from_str(&s).ok()).unwrap_or_else(||json!({}));
  let due=match frequency{"off"=>false,"weekly"=>now.timestamp()-old["epoch"].as_i64().unwrap_or(0)>=7*86400,_=>old["date"].as_str()!=Some(day.as_str())};
- if !force&&!due{return Ok(BackupInfo{path:old["path"].as_str().map(str::to_string),date:old["date"].as_str().map(str::to_string),error:None,cloud_path:old["cloudPath"].as_str().map(str::to_string),created:false});}
+ if !force&&!due&&old["path"].as_str().is_some_and(|p|Path::new(p).is_file()){return Ok(BackupInfo{path:old["path"].as_str().map(str::to_string),date:old["date"].as_str().map(str::to_string),error:old["cloudError"].as_str().map(str::to_string),cloud_path:old["cloudPath"].as_str().map(str::to_string),created:false});}
  let source=PathBuf::from(crate::data_tools::snapshot(db)?);let directory=source.parent().ok_or("backup")?.to_path_buf();
  let target=if force{source.clone()}else{let file=source.file_name().ok_or("backup")?.to_string_lossy().replacen("ledger-","ledger-auto-",1);let path=directory.join(file);fs::rename(&source,&path).map_err(error)?;path};
  let (cloud_path,cloud_error)=match mirror(db,&target){Ok(path)=>(path,None),Err(message)=>(None,Some(message))};
- let path=target.to_string_lossy().into_owned();let payload=json!({"path":path,"date":day,"epoch":now.timestamp(),"cloudPath":cloud_path});
+ let path=target.to_string_lossy().into_owned();let payload=json!({"path":path,"date":day,"epoch":now.timestamp(),"cloudPath":cloud_path,"cloudError":cloud_error});
  db.execute("INSERT INTO app_metadata(key,value) VALUES ('last_backup',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",[payload.to_string()]).map_err(error)?;
  let retain=settings["backupRetention"].as_u64().unwrap_or(30).clamp(1,365)as usize;let canonical=directory.canonicalize().map_err(error)?;
  let mut files=fs::read_dir(&directory).map_err(error)?.filter_map(|e|e.ok()).filter(|e|e.file_type().is_ok_and(|t|t.is_file())&&e.file_name().to_string_lossy().starts_with("ledger-auto-")&&e.path().extension().is_some_and(|e|e=="sqlite3")).map(|e|e.path()).collect::<Vec<_>>();files.sort();files.reverse();
@@ -29,3 +29,17 @@ pub(crate) fn run(db:&Connection,force:bool)->Result<BackupInfo>{
 }
 #[tauri::command]
 pub async fn automatic_backup(app:tauri::AppHandle,force:bool)->Result<BackupInfo>{tauri::async_runtime::spawn_blocking(move||{let state=app.state::<Mutex<Connection>>();let db=state.lock().map_err(|_|"database")?;run(&db,force)}).await.map_err(error)?}
+#[cfg(test)]mod tests{
+ use super::*;
+ #[test]fn backups_are_closed_verified_retained_and_never_prune_manual_snapshots(){
+  let root=std::env::temp_dir().join(format!("finance-backup-test-{}",std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));fs::create_dir_all(&root).unwrap();
+  let mut db=Connection::open(root.join("ledger.sqlite3")).unwrap();crate::ledger::migrate(&mut db).unwrap();
+  crate::features::save(&mut db,crate::features::Input{id:None,revision:None,kind:"settings".into(),name:"general".into(),payload:json!({"backupFrequency":"daily","backupRetention":2,"cloudFolder":root.join("mirror").to_string_lossy()}),archived:false}).unwrap();
+  let manual=run(&db,true).unwrap().path.unwrap();
+  for _ in 0..3{db.execute("DELETE FROM app_metadata WHERE key='last_backup'",[]).unwrap();assert!(run(&db,false).unwrap().created);}
+  assert!(Path::new(&manual).is_file());assert!(!run(&db,false).unwrap().created);
+  let folder=folder(&db).unwrap();assert_eq!(fs::read_dir(&folder).unwrap().filter_map(|e|e.ok()).filter(|e|e.file_name().to_string_lossy().starts_with("ledger-auto-")).count(),2);
+  for entry in fs::read_dir(folder).unwrap(){let path=entry.unwrap().path();let source=Connection::open_with_flags(&path,rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();let check:String=source.query_row("PRAGMA integrity_check",[],|r|r.get(0)).unwrap();assert_eq!(check,"ok");assert_eq!(source.pragma_query_value(None,"user_version",|r|r.get::<_,i64>(0)).unwrap(),crate::ledger::SCHEMA_VERSION);}
+  drop(db);assert!(root.canonicalize().unwrap().starts_with(std::env::temp_dir().canonicalize().unwrap()));fs::remove_dir_all(root).unwrap();
+ }
+}

@@ -173,14 +173,16 @@ pub fn save_transaction(
     input: EntryInput,
     id: Option<i64>,
     revision: Option<i64>,
-) -> CommandResult<()> {
+) -> CommandResult<i64> {
     let amount = validate_input(&input)?;
     let title = input.title.trim();
     let mut connection = database.lock().map_err(|_| "database")?;
     let tx=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|_|"database")?;
     write_transaction(&tx,&input,id,revision,amount,title)?;
+    let saved_id=id.unwrap_or_else(||tx.last_insert_rowid());
     crate::complex::validate_visibility(&tx).map_err(|_|"refund")?;
-    tx.commit().map_err(|_|"database")
+    tx.commit().map_err(|_|"database")?;
+    Ok(saved_id)
 }
 
 pub(crate) fn validate_input(input:&EntryInput)->CommandResult<i64>{

@@ -1,3 +1,4 @@
+import {useUnsavedChanges} from './useUnsavedChanges.ts';
 import {useEffect,useState,type FormEvent} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {translations,type Language} from './locales.ts';
@@ -24,6 +25,7 @@ export function Catalog({language,version,onChange}:{language:Language;version:n
   catch(e){setError(e==='duplicate'?w.duplicate:e==='conflict'?w.conflict:t.error);}
   finally{setBusy(false);}
  }
+ useUnsavedChanges(Boolean(name.trim()||editing),language);
  function save(event:FormEvent){event.preventDefault();if(editing&&name.trim()!==editing.name&&!window.confirm(w.confirm))return;void write({id:editing?.id??null,revision:editing?.revision??null,kind,name,archived:editing?.archived??false,metadata});}
  function edit(item:CatalogItem){setEditing(item);setName(item.name);setMetadata({parentId:item.parentId??null,color:item.color??'#087f78',icon:item.icon??'',translations:item.translations??{},sortOrder:item.sortOrder??null});}
  const visible=items?.filter(i=>i.kind===kind&&(archived||!i.archived)&&i.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())).sort((a,b)=>order==='alphabetical'?a.name.localeCompare(b.name):order==='frequency'?b.uses-a.uses||a.id-b.id:order==='manual'?(a.sortOrder??a.id)-(b.sortOrder??b.id):a.id-b.id);

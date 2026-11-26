@@ -1,3 +1,4 @@
+import {useUnsavedChanges} from './useUnsavedChanges.ts';
 import {useEffect,useState,type FormEvent} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {moduleCopy} from './moduleCopy.ts';
@@ -18,6 +19,7 @@ export function FeatureWorkspace({kind,language,features,catalog,version,onChang
  const [editScope,setEditScope]=useState('all'),[editFrom,setEditFrom]=useState(today());
  const [history,setHistory]=useState<{feature:Feature;versions:{revision:number;name:string;payload:Record<string,unknown>;archived:boolean;recordedAt:string}[]}>();
  useEffect(()=>{let active=true;if(kind!=='budget')return;setRows(undefined);invoke<ReportRow[]>('report_rows',{from:'0001-01-01',to:'9999-12-31',search:''}).then(data=>{if(active)setRows(data);}).catch(()=>{if(active)setError(t.error);});return()=>{active=false;};},[kind,version,t.error]);
+ useUnsavedChanges(Boolean(editor),language);
  const visible=features.filter(f=>f.kind===kind&&(showArchived||!f.archived));
  const p=editor?.payload??{};const field=(name:string,value:unknown)=>setEditor(previous=>previous?{...previous,payload:{...previous.payload,[name]:value}}:previous);
  const value=(name:string)=>String(p[name]??'');const money=(n:bigint)=>formatIls(n,locales[language]);

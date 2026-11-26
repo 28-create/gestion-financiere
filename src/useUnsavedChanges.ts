@@ -1,0 +1,3 @@
+import {useEffect} from 'react';
+import type {Language} from './locales.ts';
+export function useUnsavedChanges(dirty:boolean,language:Language){useEffect(()=>{if(!dirty)return;const beforeUnload=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};const navigate=(e:Event)=>{if(!window.confirm(language==='fr'?'Abandonner les modifications non enregistrées ?':language==='he'?'לוותר על שינויים שלא נשמרו?':'Discard unsaved changes?'))e.preventDefault();};window.addEventListener('beforeunload',beforeUnload);window.addEventListener('finance:navigate',navigate);return()=>{window.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('finance:navigate',navigate);};},[dirty,language]);}
