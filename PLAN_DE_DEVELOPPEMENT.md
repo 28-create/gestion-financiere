@@ -34,4 +34,6 @@ Le montant reste local lors des vérifications. Un écart de réconciliation, un
 | 9. Protection et données | Valider le chiffrement, les sauvegardes, la restauration et les exports. |
 | 10. Distribution | Vérifier les performances, l’utilisation hors ligne, les mises à jour et l’installation Windows. |
 
-La version actuelle pose les fondations et livre la première tranche du journal. Le suivi bancaire, patrimonial et les projections financières suivent les exclusions du cahier des charges.
+Le code en cours couvre le journal, un premier parcours d'import XLSX, les sauvegardes manuelles et leur restauration, l'historique consultable, les premières analyses et exports CSV, ainsi que la gestion des catégories et paiements. Le dernier EXE distribué précède ces ajouts : la compilation Rust et les validations interactives restent nécessaires.
+
+La phase 1 reste incomplète : tableau de bord personnalisable, tableaux avancés, budgets, récurrences et calendrier, multidevise, étiquettes et projets, transactions complexes, justificatifs, modèles, classification locale, import/export complet, chiffrement et sauvegardes configurables. Le suivi bancaire, patrimonial et les projections financières suivent les exclusions du cahier des charges.

@@ -23,6 +23,10 @@
   --muted: #22343b;
   --error: #ffadb2;
 }
+.data-tools { padding: 16px; margin-bottom: 16px; }
+.data-tools summary { cursor: pointer; font-weight: 600; }
+.data-tools button { margin: 8px; }
+.data-tools .table-scroll { max-height: 360px; overflow: auto; }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--text); background: var(--bg); }
 button, input, select { font: inherit; }
@@ -52,6 +56,33 @@ h2 { font-size: 1.1rem; margin: 0 0 12px; }
 label { display: grid; gap: 4px; color: var(--subtle); }
 label:has(input[type="search"]), .fields > label:first-child { flex: 1; min-width: 170px; }
 .form-actions { margin-block-start: 14px; }
+.classification-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-block: 14px; }
+.classification-fields label { min-width: 0; }
+.classification-fields input { width: 100%; min-width: 0; }
+.catalog-form { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin-block-start:16px; }
+.catalog-form > label { flex:1; min-width:180px; }
+.catalog-rename-warning { flex-basis:100%; margin:0; color:var(--subtle); }
+.checkbox-label { display:flex; flex-direction:row; align-items:center; gap:8px; }
+.annual-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-block:20px; }
+.trend-chart { padding:16px; margin-block:20px; }
+.chart-scroll,.comparison-scroll { overflow:auto; }
+.comparison-table { width:max-content; min-width:100%; font-variant-numeric:tabular-nums; }
+.comparison-table td { min-width:155px; white-space:nowrap; }
+.comparison-table th:first-child { position:sticky; inset-inline-start:0; z-index:1; background:var(--panel); min-width:200px; }
+.comparison-table thead th { z-index:2; }
+.chart-legend { display:inline-flex; gap:6px; align-items:center; margin-inline-end:20px; }
+.chart-legend i { width:10px; height:10px; border-radius:50%; }
+.data-tools-lock,.grid-controls { border:0; margin:0; padding:0; min-width:0; }
+.grid-controls > .settings { margin-block:14px; }
+.grid-controls .filters,.column-options,.paste-panel,.bulk-panel { margin-block:12px; padding:14px; }
+.column-options > .settings { margin-block:8px; }
+.column-options input[type=number] { width:90px; }
+.paste-panel textarea { width:100%; font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; }
+.grid-scroll { max-height:60vh; }
+.grid-scroll input:not([type=checkbox]),.grid-scroll select { width:100%; min-width:110px; }
+.dirty-row { box-shadow:inset 4px 0 var(--accent); }
+.grid-scroll th button { border:0; padding-inline:0; background:transparent; }
+@media print { .grid-controls,.data-tools-lock { display:none; } .comparison-scroll { overflow:visible; } .comparison-table { font-size:8px; } .comparison-table td { min-width:0; } }
 .spacer { flex: 1; }
 .totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 14px; }
 .metric { padding: 14px; border-block-start: 3px solid var(--accent); overflow-wrap: anywhere; }
@@ -72,3 +103,19 @@ tbody tr:nth-child(even) { background: var(--muted); }
 .pager { border-block-start: 1px solid var(--line); padding: 12px; }
 .empty, .error { padding: 10px 14px; }
 .error { color: var(--error); }
+.history { padding: 16px; margin-block: 16px; }
+.report-chart { padding: 20px; margin-block: 16px; max-height: 60vh; overflow: auto; }
+.chart-group { margin-block: 18px; }
+.bar-track { display: flex; align-items: center; gap: 12px; padding-block: 3px; }
+.bar { display: inline-block; height: 12px; border-radius: 4px; flex-shrink: 0; max-width: 65%; }
+.income-bar,.income-dot { background: #087f78; }
+.expense-bar,.expense-dot { background: #bf5264; }
+.income-dot,.expense-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+@media print {
+ .topbar, nav, .data-tools, .no-print { display:none !important; }
+ :root { color-scheme:light; --bg:#fff; --panel:#fff; --text:#111; --subtle:#444; --line:#ccc; }
+ main { width:100%; margin:0; }
+ .table-scroll,.report-chart { max-height:none; overflow:visible; }
+ .surface { break-inside:avoid; }
+ th { position:static; }
+}

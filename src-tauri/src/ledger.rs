@@ -12,14 +12,14 @@ const PAGE_SIZE: u32 = 50;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryInput {
-    title: String,
-    kind: String,
-    status: String,
-    occurred_on: String,
-    amount_micros: String,
-    category: Option<String>,
-    payment_method: Option<String>,
-    note: Option<String>,
+    pub(crate) title: String,
+    pub(crate) kind: String,
+    pub(crate) status: String,
+    pub(crate) occurred_on: String,
+    pub(crate) amount_micros: String,
+    pub(crate) category: Option<String>,
+    pub(crate) payment_method: Option<String>,
+    pub(crate) note: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -50,7 +50,7 @@ pub struct LedgerPage {
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let version: i64 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if !(0..=2).contains(&version) {
+    if !(0..=4).contains(&version) {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version == 0 {
@@ -59,6 +59,14 @@ pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     if version < 2 {
         tx.execute_batch(include_str!("../migrations/002_workbook_fields.sql"))?;
         tx.pragma_update(None, "user_version", 2)?;
+    }
+    if version < 3 {
+        tx.execute_batch(include_str!("../migrations/003_import.sql"))?;
+        tx.pragma_update(None, "user_version", 3)?;
+    }
+    if version < 4 {
+        tx.execute_batch(include_str!("../migrations/004_catalog.sql"))?;
+        tx.pragma_update(None, "user_version", 4)?;
     }
     tx.commit()
 }
@@ -161,6 +169,13 @@ pub fn save_transaction(
     id: Option<i64>,
     revision: Option<i64>,
 ) -> CommandResult<()> {
+    let amount = validate_input(&input)?;
+    let title = input.title.trim();
+    let connection = database.lock().map_err(|_| "database")?;
+    write_transaction(&connection,&input,id,revision,amount,title)
+}
+
+pub(crate) fn validate_input(input:&EntryInput)->CommandResult<i64>{
     let title = input.title.trim();
     if title.is_empty() || title.chars().count() > 200 {
         return Err("title");
@@ -174,7 +189,10 @@ pub fn save_transaction(
     if !(-999_999_999_999_999..=999_999_999_999_999).contains(&amount) {
         return Err("amount");
     }
-    let connection = database.lock().map_err(|_| "database")?;
+    Ok(amount)
+}
+
+pub(crate) fn write_transaction(connection:&Connection,input:&EntryInput,id:Option<i64>,revision:Option<i64>,amount:i64,title:&str)->CommandResult<()>{
     let affected = match (id, revision) {
         (None, None) => connection.execute(
             "INSERT INTO transactions (title, kind, status, occurred_on, amount_micros, category, payment_method, note)

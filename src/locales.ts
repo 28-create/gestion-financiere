@@ -1,5 +1,6 @@
 export const translations = {
   fr: {
+    addExpense: "Ajouter une dépense", addIncome: "Ajouter un revenu",
     app: "Gestion financière", journal: "Journal", income: "Revenus", expense: "Dépenses",
     trash: "Corbeille", balance: "Solde net", title: "Titre", amount: "Montant (₪)", date: "Date",
     status: "Statut", kind: "Type", realized: "Réalisée", planned: "Prévue", pending: "En attente",
@@ -14,6 +15,7 @@ export const translations = {
     working: "Chargement…", realizedTotals: "Totaux réalisés de la sélection"
   },
   en: {
+    addExpense: "Add expense", addIncome: "Add income",
     app: "Personal finances", journal: "Journal", income: "Income", expense: "Expenses",
     trash: "Trash", balance: "Net balance", title: "Title", amount: "Amount (₪)", date: "Date",
     status: "Status", kind: "Type", realized: "Actual", planned: "Planned", pending: "Pending",
@@ -28,6 +30,7 @@ export const translations = {
     working: "Loading…", realizedTotals: "Actual totals for the current selection"
   },
   he: {
+    addExpense: "הוספת הוצאה", addIncome: "הוספת הכנסה",
     app: "ניהול כספים", journal: "יומן", income: "הכנסות", expense: "הוצאות",
     trash: "סל מחזור", balance: "יתרה נטו", title: "כותרת", amount: "סכום (₪)", date: "תאריך",
     status: "סטטוס", kind: "סוג", realized: "בוצעה", planned: "מתוכננת", pending: "ממתינה",

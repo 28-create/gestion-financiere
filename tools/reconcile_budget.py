@@ -69,7 +69,7 @@ def column_label(number):
     return result
 
 
-def table_rows(table, cells, strings, since_1904):
+def table_rows(table, cells, strings, since_1904, *, details=None):
     start, end = table.attrib["ref"].split(":")
     first = re.fullmatch(r"([A-Z]+)(\d+)", start)
     last = re.fullmatch(r"[A-Z]+(\d+)", end)
@@ -109,12 +109,19 @@ def table_rows(table, cells, strings, since_1904):
             rounded = amount.quantize(MICRO, rounding=ROUND_HALF_UP)
             if abs(amount - rounded) > EXCEL_NOISE:
                 raise ValueError("montant significatif au-delà de six décimales")
-            yield row, excel_date(raw_date, since_1904), rounded, category, None
+            when = excel_date(raw_date, since_1904)
+            if details is not None:
+                details[row] = (
+                    source("description"),
+                    source("source") or source("moyen de paiement"),
+                    source("note"),
+                )
+            yield row, when, rounded, category, None
         except (ValueError, InvalidOperation, OverflowError) as error:
             yield row, None, None, None, str(error)
 
 
-def reconcile(path):
+def reconcile(path, *, collect=None):
     with ZipFile(path) as book:
         root = read_xml(book, WORKBOOK)
         links = relationships(book, WORKBOOK)
@@ -148,10 +155,16 @@ def reconcile(path):
                     issues.append({"sheet": year, "table": name, "reason": "table inclassable ou répétée"})
                     continue
                 recognized.add(kind)
-                for row, when, amount, category, error in table_rows(table, cells, strings, since_1904):
+                details = {} if collect is not None else None
+                for row, when, amount, category, error in table_rows(
+                    table, cells, strings, since_1904, details=details
+                ):
                     if error is not None or str(when.year) != year:
                         issues.append({"sheet": year, "table": name, "row": row, "reason": error or "date hors de l’année de la feuille"})
                         continue
+                    if collect is not None:
+                        title, payment_method, note = details.pop(row)
+                        collect((title, kind, when, amount, category, payment_method, note, year, name, row))
                     counts[kind] += 1
                     amounts[kind] += amount
                     months[when.month][kind] += amount

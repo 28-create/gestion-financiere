@@ -1,5 +1,12 @@
 # Tests
 
+Catégories et paiements : neuf tests Node et trois tests Python passent. Les nouveaux tests exécutent la migration 004 et ses déclencheurs sur SQLite, vérifient la conservation des opérations et de leur historique, la séparation revenus/dépenses, les noms multilingues et le maintien de l'archivage. Les modules de domaine passent le contrôle TypeScript ; les écrans passent la vérification de syntaxe TSX. Un test Rust couvre le renommage global, son historique et les conflits de révision mais ne peut pas être exécuté sans Rust. La compilation et la vérification visuelle du nouvel EXE restent à effectuer.
+
+Suite de la phase 1 : les six tests Node et les trois tests Python passent. Les tests ajoutés vérifient l'exclusion des opérations prévues des analyses, les corrections négatives, la précision des agrégats, la protection CSV et le calcul arithmétique avec arrondi final. Le compilateur TypeScript local a permis de corriger un type de tampon dans le lecteur XLSX. La vérification complète de React reste bloquée par les dépendances absentes. Les commandes Rust de restauration et de reporting, ainsi que les nouveaux écrans, doivent encore être compilés et testés sur Windows. Le workflow Windows lance désormais aussi les tests Rust.
+
+Travaux d'import : les tests existants Node (3) et Python (3) passent. Les migrations 001 à 003 s'appliquent successivement sur une base SQLite vierge. Un test Rust de validation des lignes a été ajouté mais n'a pas été exécuté : Rust n'est pas disponible sur ce poste. Le lecteur XLSX et le parcours d'import doivent encore être testés dans WebView2 avec le classeur réel, les doublons légitimes, l'annulation, les dates 1904 et les anomalies. La compilation TypeScript et la compilation Windows restent à effectuer. Ces changements ne sont pas prêts pour distribution.
+
+
 `npm test` exécute les tests du moteur de précision monétaire et du schéma SQLite en mémoire avec Node.js 24. Ils vérifient la lecture décimale, les arrondis à l’affichage, les contraintes, l’historique des révisions et la restauration. Les données de test sont synthétiques et confinées à la mémoire.
 
 L’inventaire Excel est également vérifié avec un classeur synthétique. La commande `python -B -m unittest discover -s tests -p test_audit_excel.py` vérifie les feuilles masquées, formules, validations, tableaux et graphiques et contrôle l’intégrité du fichier source. Elle vérifie aussi la distinction entre opérations, lignes modèles et lignes de total, les calendriers Excel et le contrôle de précision de l’aperçu de migration.

@@ -1,5 +1,9 @@
 # MASTER PROMPT — APPLICATION PROFESSIONNELLE DE GESTION FINANCIÈRE PERSONNELLE
 
+## Périmètre actualisé — 26 novembre 2026
+
+Décision explicite de l'utilisateur : réaliser intégralement la phase 1 de manière autonome, publier le code sur GitHub et produire l'exécutable Windows. Les justificatifs et la sécurité applicative (mot de passe, verrouillage, chiffrement et gestion des clés) sont reportés en phase 2. Les sauvegardes, la restauration, l'intégrité des calculs, la confidentialité des données et la validation des entrées restent exigées en phase 1. Les autres exclusions et reports initiaux restent applicables.
+
 ## 1. Mission générale
 
 Tu agis comme un architecte logiciel senior, un développeur full-stack expérimenté, un expert en gestion de données financières, en sécurité informatique et en design UX/UI d'applications professionnelles.

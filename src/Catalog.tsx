@@ -1,0 +1,32 @@
+import {useEffect,useState,type FormEvent} from 'react';
+import {invoke} from '@tauri-apps/api/core';
+import {translations,type Language} from './locales.ts';
+import type {CatalogItem,CatalogKind} from './domain/catalog.ts';
+const copy={
+ fr:{title:'Catégories et moyens de paiement',add:'Créer',name:'Nom',archive:'Archiver',reactivate:'Réactiver',archived:'Archivé',showArchived:'Afficher les éléments archivés',uses:'Opérations actives',rename:'Renommer',renameWarning:'Le nouveau nom sera appliqué à toutes les opérations concernées, y compris dans la corbeille. Les anciens noms resteront dans l’historique.',confirm:'Appliquer ce nouveau nom à toutes les opérations concernées ?',duplicate:'Ce nom existe déjà dans cette liste.',conflict:'Cet élément a changé. Actualisez la liste avant de réessayer.',empty:'Aucun élément dans cette liste.',search:'Rechercher un nom',help:'Une valeur saisie dans une opération est ajoutée à sa liste. L’archivage la retire des suggestions et conserve les opérations existantes.',refresh:'Actualiser'},
+ en:{title:'Categories and payment methods',add:'Create',name:'Name',archive:'Archive',reactivate:'Reactivate',archived:'Archived',showArchived:'Show archived items',uses:'Active transactions',rename:'Rename',renameWarning:'The new name will apply to all matching transactions, including trash. Previous names remain in the history.',confirm:'Apply this name to all matching transactions?',duplicate:'This name already exists in this list.',conflict:'This item changed. Refresh the list and try again.',empty:'No items in this list.',search:'Search names',help:'Values entered in a transaction are added to their list. Archiving removes suggestions and preserves existing transactions.',refresh:'Refresh'},
+ he:{title:'קטגוריות ואמצעי תשלום',add:'יצירה',name:'שם',archive:'ארכוב',reactivate:'הפעלה מחדש',archived:'בארכיון',showArchived:'הצגת פריטים בארכיון',uses:'פעולות פעילות',rename:'שינוי שם',renameWarning:'השם החדש יחול על כל הפעולות המתאימות, כולל בסל המחזור. השמות הקודמים יישארו בהיסטוריה.',confirm:'להחיל את השם החדש על כל הפעולות המתאימות?',duplicate:'שם זה כבר קיים ברשימה.',conflict:'הפריט השתנה. רעננו את הרשימה ונסו שוב.',empty:'אין פריטים ברשימה.',search:'חיפוש שם',help:'ערכים שמוזנים בפעולה נוספים לרשימה. ארכוב מסיר אותם מההצעות ושומר על הפעולות הקיימות.',refresh:'רענון'}
+};
+export function Catalog({language,version,onChange}:{language:Language;version:number;onChange:()=>void}){
+ const t=translations[language],w=copy[language];
+ const [kind,setKind]=useState<CatalogKind>('expense');const [items,setItems]=useState<CatalogItem[]>();
+ const [editing,setEditing]=useState<CatalogItem>();const [name,setName]=useState('');
+ const [archived,setArchived]=useState(false);const [query,setQuery]=useState('');const [busy,setBusy]=useState(false);
+ const [error,setError]=useState('');const [reload,setReload]=useState(0);
+ useEffect(()=>{let active=true;setItems(undefined);setError('');invoke<CatalogItem[]>('list_catalog').then(rows=>{if(active)setItems(rows);}).catch(()=>{if(active)setError(t.error);});return()=>{active=false;};},[version,reload,t.error]);
+ async function write(input:{id:number|null;revision:number|null;kind:CatalogKind;name:string;archived:boolean}){
+  if(busy)return;setBusy(true);setError('');
+  try{await invoke('save_catalog_item',{input});setEditing(undefined);setName('');onChange();}
+  catch(e){setError(e==='duplicate'?w.duplicate:e==='conflict'?w.conflict:t.error);}
+  finally{setBusy(false);}
+ }
+ function save(event:FormEvent){event.preventDefault();if(editing&&name.trim()!==editing.name&&!window.confirm(w.confirm))return;void write({id:editing?.id??null,revision:editing?.revision??null,kind,name,archived:editing?.archived??false});}
+ const visible=items?.filter(i=>i.kind===kind&&(archived||!i.archived)&&i.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+ return <section><div className="page-title"><h1>{w.title}</h1><button disabled={busy} onClick={()=>{setEditing(undefined);setName('');setReload(n=>n+1);}}>{w.refresh}</button></div><p>{w.help}</p>
+ <div className="settings">{(['expense','income','payment'] as const).map(k=><button disabled={busy} className={kind===k?'primary':''} key={k} aria-pressed={kind===k} onClick={()=>{setKind(k);setEditing(undefined);setName('');setError('');}}>{k==='payment'?t.paymentMethod:t[k]}</button>)}</div>
+ <form className="editor surface catalog-form" onSubmit={save}><label>{w.name}<input required maxLength={200} disabled={busy} value={name} onChange={e=>setName(e.target.value)}/></label><button className="primary" disabled={busy||!name.trim()}>{editing?t.save:w.add}</button>{editing&&<button type="button" disabled={busy} onClick={()=>{setEditing(undefined);setName('');}}>{t.cancel}</button>}{editing&&<p className="catalog-rename-warning">{w.renameWarning}</p>}</form>
+ <div className="filters surface"><label>{w.search}<input type="search" value={query} onChange={e=>setQuery(e.target.value)}/></label><label className="checkbox-label"><input type="checkbox" checked={archived} onChange={e=>setArchived(e.target.checked)}/>{w.showArchived}</label></div>
+ {error&&<p className="error" role="alert">{error}</p>}
+ {!items&&!error?<p role="status">{t.working}</p>:visible?.length===0?<p>{w.empty}</p>:visible&&<div className="surface table-scroll"><table><thead><tr><th>{w.name}</th><th>{w.uses}</th><th>{t.actions}</th></tr></thead><tbody>{visible.map(item=><tr key={item.id}><td><bdi>{item.name}</bdi>{item.archived&&<small> · {w.archived}</small>}</td><td>{item.uses}</td><td><div className="row-actions"><button disabled={busy} onClick={()=>{setEditing(item);setName(item.name);}}>{w.rename}</button><button disabled={busy} onClick={()=>void write({id:item.id,revision:item.revision,kind:item.kind,name:item.name,archived:!item.archived})}>{item.archived?w.reactivate:w.archive}</button></div></td></tr>)}</tbody></table></div>}
+ </section>;
+}
