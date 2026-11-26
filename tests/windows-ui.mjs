@@ -12,8 +12,14 @@ if(process.env.RUNNER_ENVIRONMENT!=='github-hosted')throw Error('Disposable Wind
 const root=path.resolve(process.env.RUNNER_TEMP,'finance-ui-'+process.env.GITHUB_RUN_ID),shots=path.resolve('ui-results');await mkdir(root,{recursive:true});await mkdir(shots,{recursive:true});
 const application=path.join(root,'gestion-financiere.exe');await copyFile('src-tauri/target/debug/gestion-financiere.exe',application);await writeFile(path.join(root,'portable-mode'),'');
 async function freePort(){return new Promise((resolve,reject)=>{const s=net.createServer();s.on('error',reject);s.listen(0,'127.0.0.1',()=>{const {port}=s.address();s.close(()=>resolve(port));});});}
-const debugPort=await freePort(),driverPort=await freePort();
-const appProc=spawn(application,[],{cwd:root,stdio:'inherit',env:{...process.env,WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${debugPort}`,WEBVIEW2_USER_DATA_FOLDER:path.join(root,'webview2')}});
+const debugPort=await freePort(),driverPort=await freePort(),webviewDir=path.join(root,'webview2');
+const regArgsKey='HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArguments';
+const regDataKey='HKLM\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2\\UserDataFolder';
+for(const args of [
+ ['add',regArgsKey,'/v','gestion-financiere.exe','/t','REG_SZ','/d',`--remote-debugging-port=${debugPort}`,'/f'],
+ ['add',regDataKey,'/v','gestion-financiere.exe','/t','REG_SZ','/d',webviewDir,'/f'],
+]){const r=spawnSync('reg',args,{stdio:'inherit'});if(r.status!==0)throw Error(`reg ${args.join(' ')} failed (${r.status})`);}
+const appProc=spawn(application,[],{cwd:root,stdio:'inherit',env:{...process.env,WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${debugPort}`,WEBVIEW2_USER_DATA_FOLDER:webviewDir}});
 let appExited=null;appProc.on('exit',(code,signal)=>{appExited={code,signal};});
 const edgeDriver=spawn(path.resolve('msedgedriver.exe'),[`--port=${driverPort}`,'--allowed-ips=127.0.0.1'],{stdio:['ignore','ignore','inherit']});
 let driver;
@@ -72,4 +78,4 @@ try{
  }
  await resizeWindow(540,700);await writeFile(path.join(shots,'compact-540.png'),await driver.takeScreenshot(),'base64');assert.ok(await driver.executeScript('return document.documentElement.scrollWidth<=window.innerWidth+2'));
  assert.deepEqual(await driver.executeScript('return window.uiErrors??[]'),[]);await writeFile(path.join(shots,'result.json'),JSON.stringify({result:'OK',nativeBridge:true,exactAmounts:true,restoreOnDisk:true,duplicateReview:true,languages:['fr','he','en'],themes:['light','dark'],widths:[1180,540],transactions:(await rows()).length},null,2));console.log('Windows native bridge and UI tests passed.');
-}catch(error){if(driver)try{await writeFile(path.join(shots,'failure.png'),await driver.takeScreenshot(),'base64');}catch{}throw error;}finally{try{await driver?.quit();}catch{}edgeDriver.kill();if(!appExited&&appProc.pid){try{spawnSync('taskkill',['/F','/T','/PID',String(appProc.pid)],{stdio:'ignore'});}catch{appProc.kill();}}}
+}catch(error){if(driver)try{await writeFile(path.join(shots,'failure.png'),await driver.takeScreenshot(),'base64');}catch{}throw error;}finally{try{await driver?.quit();}catch{}edgeDriver.kill();if(!appExited&&appProc.pid){try{spawnSync('taskkill',['/F','/T','/PID',String(appProc.pid)],{stdio:'ignore'});}catch{appProc.kill();}}for(const key of [regArgsKey,regDataKey]){try{spawnSync('reg',['delete',key,'/v','gestion-financiere.exe','/f'],{stdio:'ignore'});}catch{}}}
