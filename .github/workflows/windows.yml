@@ -9,7 +9,7 @@ permissions:
 jobs:
   validate:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,6 +37,23 @@ jobs:
           if-no-files-found: error
       - run: python -B -m unittest discover -s tests -p test_audit_excel.py
       - run: npm run tauri -- build --no-bundle
+      - name: Préparer les contrôles WebView2
+        shell: pwsh
+        run: |
+          cargo install tauri-driver --locked
+          cargo install --git https://github.com/chippers/msedgedriver-tool --locked
+          & "$env:USERPROFILE/.cargo/bin/msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
+      - run: npm run tauri -- build --debug --no-bundle
+      - name: Tester l'interface et les commandes natives
+        timeout-minutes: 8
+        run: node tests/windows-ui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: controles-interface-windows
+          path: ui-results/*
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: gestion-financiere-windows

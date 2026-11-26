@@ -20,6 +20,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "typescript": "^5.9",
-    "vite": "^7"
+    "vite": "^7",
+    "selenium-webdriver": "4.51.0"
   }
 }
