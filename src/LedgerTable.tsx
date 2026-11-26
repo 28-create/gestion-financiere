@@ -1,7 +1,9 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {draftFromRow,gridPayload,pastedDrafts,sortGridRows,type Draft} from './domain/grid.ts';
-import {csvCell,transactionsCsv,type ReportRow} from './domain/reports.ts';
+import {csvCell,transactionsCsv,transactionsSheet,categoryAllocations,type ReportRow} from './domain/reports.ts';
+import {writeXlsx} from './domain/xlsx.ts';
+import {saveText,saveBytes} from './services/exports.ts';
 import {decimalAmount,formatIls} from './domain/money.ts';
 import {availableItems,type CatalogItem} from './domain/catalog.ts';
 import {locales,translations,type Language} from './locales.ts';
@@ -10,7 +12,7 @@ const columns=['occurredOn','title','kind','amountMicros','category','paymentMet
 type Column=typeof columns[number];
 function preferences():{order:Column[];hidden:Column[];widths:Record<string,number>}{try{const value=JSON.parse(localStorage.getItem('ledger.columns')??'null');const order=columns.filter(c=>!value?.order?.includes(c));for(const c of value?.order??[])if(columns.includes(c)&&!order.includes(c))order.push(c);return {order,hidden:(value?.hidden??['status','note']).filter((c:Column)=>columns.includes(c)),widths:value?.widths??{}};}catch{return {order:[...columns],hidden:['status','note'],widths:{}};}}
 function localDay(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-function saveCsv(rows:ReportRow[]){const url=URL.createObjectURL(new Blob([transactionsCsv(rows)],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='operations.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}
+async function saveCsv(rows:ReportRow[]){await saveText('operations.csv',transactionsCsv(rows));}
 export function LedgerTable({from,to,search,kind,language,version,catalog,disabled,onChange,onDirty,onBusy,onEdit,onHistory,onDetails}:{from:string;to:string;search:string;kind:'income'|'expense'|undefined;language:Language;version:number;catalog:CatalogItem[];disabled:boolean;onChange:()=>void;onDirty:(dirty:boolean)=>void;onBusy:(busy:boolean)=>void;onEdit:(row:ReportRow)=>void;onHistory:(id:number)=>void;onDetails:(row:ReportRow)=>void}){
  const t=translations[language],w=gridCopy[language];const lock=useRef(false);
  const [loaded,setLoaded]=useState<{scope:string;rows:ReportRow[]}>();const [error,setError]=useState('');const [message,setMessage]=useState('');const [reload,setReload]=useState(0);
@@ -25,7 +27,7 @@ export function LedgerTable({from,to,search,kind,language,version,catalog,disabl
  useEffect(()=>{let active=true;setLoaded(undefined);setError('');setSelected([]);setPage(0);if(!from||!to||from>to){setError(t.filterError);return;}
   invoke<ReportRow[]>('report_rows',{from,to,search}).then(data=>{if(active)setLoaded({scope,rows:data});}).catch(()=>{if(active)setError(t.error);});return()=>{active=false;};
  },[from,to,search,scope,t.error,t.filterError]);
- const filtered=useMemo(()=>sortGridRows((rows??[]).filter(row=>(!kind||row.kind===kind)&&(!filters.category||row.category===filters.category)&&(!filters.paymentMethod||row.paymentMethod===filters.paymentMethod)&&(!filters.status||row.status===filters.status)),sort.field,sort.direction),[rows,kind,filters,sort]);
+ const filtered=useMemo(()=>sortGridRows((rows??[]).filter(row=>(!kind||row.kind===kind)&&(!filters.category||categoryAllocations(row).some(a=>(a.category||null)===JSON.parse(filters.category)))&&(!filters.paymentMethod||(row.paymentMethod||null)===JSON.parse(filters.paymentMethod))&&(!filters.status||row.status===filters.status)),sort.field,sort.direction),[rows,kind,filters,sort]);
  const pageCount=Math.max(1,Math.ceil(filtered.length/50)),current=Math.min(page,pageCount-1),pageRows=filtered.slice(current*50,current*50+50);
  const selection=(rows??[]).filter(r=>selected.includes(r.id));const shown=prefs.order.filter(c=>!prefs.hidden.includes(c));
  const labels:Record<Column,string>={occurredOn:t.date,title:t.title,kind:t.kind,amountMicros:t.amount,category:t.category,paymentMethod:t.paymentMethod,status:t.status,note:t.note};
@@ -43,6 +45,7 @@ export function LedgerTable({from,to,search,kind,language,version,catalog,disabl
   if(column==='kind')return t[draft.kind];
   if(column==='status')return <select aria-label={t.status} disabled={disabled} value={draft.status} onChange={e=>update(draft,'status',e.target.value)}>{(['realized','planned','pending'] as const).map(s=><option key={s} value={s}>{t[s]}</option>)}</select>;
   const field=column==='amountMicros'?'amount':column;const list=column==='category'?`grid-${draft.kind}-categories`:column==='paymentMethod'?'grid-payments':undefined;
+  if(column==='note')return <textarea aria-label={labels[column]} disabled={disabled} rows={2} value={draft.note} onChange={e=>update(draft,'note',e.target.value)}/>;
   return <input aria-label={labels[column]} disabled={disabled} type={column==='occurredOn'?'date':'text'} list={list} maxLength={column==='title'?200:undefined} value={draft[field]} onChange={e=>update(draft,field,e.target.value)}/>;
  }
  function display(row:ReportRow,column:Column){if(column==='amountMicros')return money(BigInt(row.amountMicros));if(column==='kind')return t[row.kind as 'income'|'expense'];if(column==='status')return t[row.status as 'realized'|'planned'|'pending'];return row[column]??'';}
@@ -53,9 +56,9 @@ export function LedgerTable({from,to,search,kind,language,version,catalog,disabl
  <fieldset disabled={disabled} className="grid-controls"><div className="settings">
  <button onClick={()=>setEditing(v=>!v)} aria-pressed={editing}>{w.edit}</button>{kind!=='income'&&<button onClick={()=>add('expense')}>{w.addExpense}</button>}{kind!=='expense'&&<button onClick={()=>add('income')}>{w.addIncome}</button>}
  <button disabled={!dirty} onClick={()=>void run(async()=>{const changes=pending.map((draft,index)=>{try{return gridPayload(draft);}catch{throw new Error(`${w.invalid} #${index+1} · ${draft.title}`);}});await invoke('save_grid',{changes});setDrafts({});setEditing(false);setMessage(w.saved);onChange();})}>{w.save} ({pending.length})</button><button disabled={!dirty} onClick={discard}>{w.discard}</button><button onClick={()=>{if(discard())setReload(v=>v+1);}}>{w.refresh}</button>
- <button disabled={!rows} onClick={()=>saveCsv(filtered)}>{w.export}</button><button disabled={!selection.length} onClick={()=>saveCsv(selection)}>{w.exportSelected}</button>
+ <button disabled={!rows} onClick={()=>void run(()=>saveCsv(filtered))}>{w.export}</button><button disabled={!selection.length} onClick={()=>void run(()=>saveCsv(selection))}>{w.exportSelected}</button><button disabled={!rows} onClick={()=>void run(async()=>{await saveBytes('operations.xlsx',writeXlsx([transactionsSheet(filtered)],language==='he'));})}>Excel</button><button disabled={!selection.length} onClick={()=>void run(async()=>{await saveBytes('selection.xlsx',writeXlsx([transactionsSheet(selection)],language==='he'));})}>Excel · {w.selected}</button>
  </div><div className="filters surface">
- {(['category','paymentMethod'] as const).map(field=><label key={field}>{field==='category'?t.category:t.paymentMethod}<select value={filters[field]} onChange={e=>{setFilters({...filters,[field]:e.target.value});setPage(0);}}><option value="">{w.all}</option>{Array.from(new Set((rows??[]).filter(r=>!kind||r.kind===kind).map(r=>r[field]).filter((v):v is string=>Boolean(v)))).sort().map(v=><option key={v}>{v}</option>)}</select></label>)}
+ {(['category','paymentMethod'] as const).map(field=><label key={field}>{field==='category'?t.category:t.paymentMethod}<select value={filters[field]} onChange={e=>{setFilters({...filters,[field]:e.target.value});setPage(0);}}><option value="">{w.all}</option><option value="null">—</option>{Array.from(new Set((rows??[]).filter(r=>!kind||r.kind===kind).flatMap(r=>field==='category'?categoryAllocations(r).map(a=>a.category):[r.paymentMethod]).filter((v):v is string=>Boolean(v)))).sort().map(v=><option key={v} value={JSON.stringify(v)}>{v}</option>)}</select></label>)}
  <label>{t.status}<select value={filters.status} onChange={e=>{setFilters({...filters,status:e.target.value});setPage(0);}}><option value="">{w.all}</option>{(['realized','planned','pending'] as const).map(s=><option key={s} value={s}>{t[s]}</option>)}</select></label></div>
  <details className="surface column-options"><summary>{w.columns}</summary>{prefs.order.map((c,i)=><div className="settings" key={c}><label className="checkbox-label"><input type="checkbox" checked={!prefs.hidden.includes(c)} onChange={e=>setPrefs({...prefs,hidden:e.target.checked?prefs.hidden.filter(v=>v!==c):[...prefs.hidden,c]})}/>{labels[c]}</label><input aria-label={labels[c]} type="number" min="80" max="500" value={prefs.widths[c]??160} onChange={e=>setPrefs({...prefs,widths:{...prefs.widths,[c]:Math.max(80,Math.min(500,Number(e.target.value)))}})}/><button disabled={i===0} onClick={()=>{const order=[...prefs.order];[order[i-1],order[i]]=[order[i],order[i-1]];setPrefs({...prefs,order});}}>↑</button><button disabled={i===prefs.order.length-1} onClick={()=>{const order=[...prefs.order];[order[i+1],order[i]]=[order[i],order[i+1]];setPrefs({...prefs,order});}}>↓</button></div>)}</details>
  <details className="surface paste-panel"><summary>{w.paste}</summary><p>{w.pasteHelp}</p><textarea aria-label={w.paste} rows={5} value={paste} onChange={e=>setPaste(e.target.value)}/><div className="settings">{kind!=='income'&&<button onClick={()=>preparePaste('expense')}>{w.pasteExpense}</button>}{kind!=='expense'&&<button onClick={()=>preparePaste('income')}>{w.pasteIncome}</button>}</div></details>

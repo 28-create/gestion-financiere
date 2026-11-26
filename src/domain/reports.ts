@@ -1,3 +1,5 @@
+import {decimalAmount} from './money.ts';
+import type {ExcelSheet} from './xlsx.ts';
 export type ReportRow={id:number;revision?:number;title:string;kind:string;status:string;occurredOn:string;amountMicros:string;category:string|null;paymentMethod:string|null;note:string|null;projectId?:number|null;tags?:number[];splits?:{category:string;amountMicros:string}[];nature?:string|null;necessity?:string|null};
 export type Bucket={name:string;income:bigint;expense:bigint;count:number};
 export function summarize(rows:ReportRow[],field:'month'|'category'|'payment'|'year') {
@@ -22,5 +24,6 @@ export function csvCell(value:string){
 export function transactionsCsv(rows:ReportRow[]){
  const headers=['Date','Title','Kind','Status','Amount ILS','Category','Payment','Note'];
  const decimal=(s:string)=>{const n=BigInt(s),m=n<0n?-n:n;return(n<0n?'-':'')+(m/1000000n).toString()+'.'+(m%1000000n).toString().padStart(6,'0');};
- return '\uFEFF'+[headers.map(csvCell).join(';'),...rows.map(r=>[r.occurredOn,r.title,r.kind,r.status,decimal(r.amountMicros),r.category??'',r.paymentMethod??'',r.note??''].map(csvCell).join(';'))].join('\r\n');
+ return '\uFEFF'+[headers.map(csvCell).join(';'),...rows.map(r=>[r.occurredOn,r.title,r.kind,r.status,decimal(r.amountMicros),r.category??'',r.paymentMethod??'',r.note??''].map((value,i)=>i===4?'"'+value+'"':csvCell(value)).join(';'))].join('\r\n');
 }
+export function transactionsSheet(rows:ReportRow[],name='Transactions'):ExcelSheet{return {name,rows:[['Date','Title','Kind','Status','Amount ILS','Category','Payment','Note','ID'],...rows.map(r=>[r.occurredOn,r.title,r.kind,r.status,{number:decimalAmount(BigInt(r.amountMicros))},r.category??'',r.paymentMethod??'',r.note??'',r.id])]};}

@@ -176,8 +176,11 @@ pub fn save_transaction(
 ) -> CommandResult<()> {
     let amount = validate_input(&input)?;
     let title = input.title.trim();
-    let connection = database.lock().map_err(|_| "database")?;
-    write_transaction(&connection,&input,id,revision,amount,title)
+    let mut connection = database.lock().map_err(|_| "database")?;
+    let tx=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|_|"database")?;
+    write_transaction(&tx,&input,id,revision,amount,title)?;
+    crate::complex::validate_visibility(&tx).map_err(|_|"refund")?;
+    tx.commit().map_err(|_|"database")
 }
 
 pub(crate) fn validate_input(input:&EntryInput)->CommandResult<i64>{
@@ -241,8 +244,10 @@ pub fn set_deleted(
     revision: i64,
     deleted: bool,
 ) -> CommandResult<()> {
-    let connection = database.lock().map_err(|_| "database")?;
-    let affected = connection.execute(
+    let mut connection = database.lock().map_err(|_| "database")?;
+    let tx=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|_|"database")?;
+    if !deleted{let (kind,amount):(String,i64)=tx.query_row("SELECT kind,amount_micros FROM transactions WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?))).map_err(|_|"database")?;crate::complex::validate_links(&tx,id,&kind,amount).map_err(|_|"refund")?;}
+    let affected = tx.execute(
         "UPDATE transactions
          SET deleted_at = CASE WHEN ?1 THEN CURRENT_TIMESTAMP ELSE NULL END,
              revision = revision + 1, updated_at = CURRENT_TIMESTAMP
@@ -252,5 +257,7 @@ pub fn set_deleted(
     if affected != 1 {
         return Err("conflict");
     }
+    crate::complex::validate_visibility(&tx).map_err(|_|"refund")?;
+    tx.commit().map_err(|_|"database")?;
     Ok(())
 }

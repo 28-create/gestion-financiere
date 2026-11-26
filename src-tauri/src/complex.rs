@@ -5,6 +5,10 @@ use serde::{Deserialize,Serialize};
 use tauri::State;
 type Result<T>=std::result::Result<T,String>;
 fn error(_:rusqlite::Error)->String{"database".into()}
+pub(crate) fn validate_visibility(db:&Connection)->Result<()>{
+ let invalid:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM transaction_links l JOIN transactions t ON t.id=l.transaction_id JOIN transactions o ON o.id=l.original_id WHERE t.deleted_at IS NULL AND (o.deleted_at IS NOT NULL OR o.status<>'realized' OR t.status<>'realized'))",[],|r|r.get(0)).map_err(error)?;
+ if invalid{return Err("refund_link".into());}Ok(())
+}
 pub(crate) fn validate_links(db:&Connection,id:i64,kind:&str,amount:i64)->Result<()>{
  let link:Option<(i64,i64,String)>=db.query_row("SELECT l.original_id,o.amount_micros,o.kind FROM transaction_links l JOIN transactions o ON o.id=l.original_id WHERE l.transaction_id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(error)?;
  if let Some((original,total,original_kind))=link{let other:i64=db.query_row("SELECT coalesce(sum(-t.amount_micros),0) FROM transactions t JOIN transaction_links l ON l.transaction_id=t.id WHERE l.original_id=?1 AND t.id<>?2 AND t.deleted_at IS NULL",params![original,id],|r|r.get(0)).map_err(error)?;if kind!="expense"||original_kind!="expense"||amount>=0||i128::from(-amount)+i128::from(other)>i128::from(total){return Err("refund".into());}}

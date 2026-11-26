@@ -17,6 +17,7 @@ fn write(db:&mut Connection,changes:&[Change])->Result<(),String>{
  }).collect::<Result<Vec<_>,_>>().map_err(str::to_string)?;
  let tx=db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|_|"database")?;
  for (change,amount) in changes.iter().zip(amounts){write_transaction(&tx,&change.input,change.id,change.revision,amount,change.input.title.trim()).map_err(str::to_string)?;}
+ crate::complex::validate_visibility(&tx)?;
  tx.commit().map_err(|_|"database".into())
 }
 #[tauri::command]
@@ -33,6 +34,7 @@ fn remove(db:&mut Connection,rows:&[Selection])->Result<(),String>{
   let count=tx.execute("UPDATE transactions SET deleted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP,revision=revision+1 WHERE id=?1 AND revision=?2 AND deleted_at IS NULL",[row.id,row.revision]).map_err(|_|"database")?;
   if count!=1{return Err("conflict".into());}
  }
+ crate::complex::validate_visibility(&tx)?;
  tx.commit().map_err(|_|"database".into())
 }
 #[tauri::command]
