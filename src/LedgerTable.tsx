@@ -20,6 +20,7 @@ export function LedgerTable({from,to,search,kind,language,version,catalog,disabl
  const [editing,setEditing]=useState(false);const [drafts,setDrafts]=useState<Record<string,Draft>>({});const [selected,setSelected]=useState<number[]>([]);
  const [filters,setFilters]=useState({category:'',paymentMethod:'',status:''});const [sort,setSort]=useState<{field:Column;direction:'asc'|'desc'}>({field:'occurredOn',direction:'desc'});
  const [secondary,setSecondary]=useState<{field:Column|'';direction:'asc'|'desc'}>({field:'',direction:'asc'}),[group,setGroup]=useState<''|'category'|'payment'>('');
+ const [globalTotals,setGlobalTotals]=useState<{incomeMicros:string;expenseMicros:string;count:number}[]>();
  const [context,setContext]=useState<{row:ReportRow;x:number;y:number}>();
  const tr=(fr:string,en:string,he:string)=>language==='fr'?fr:language==='he'?he:en;
  useEffect(()=>{const close=()=>setContext(undefined);const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close();};window.addEventListener('click',close);window.addEventListener('keydown',key);return()=>{window.removeEventListener('click',close);window.removeEventListener('keydown',key);};},[]);
@@ -31,6 +32,7 @@ export function LedgerTable({from,to,search,kind,language,version,catalog,disabl
  useEffect(()=>{let active=true;setLoaded(undefined);setError('');setSelected([]);setPage(0);if(!from||!to||from>to){setError(t.filterError);return;}
   invoke<ReportRow[]>('report_rows',{from,to,search}).then(data=>{if(active)setLoaded({scope,rows:data});}).catch(()=>{if(active)setError(t.error);});return()=>{active=false;};
  },[from,to,search,scope,t.error,t.filterError]);
+ useEffect(()=>{let active=true;setGlobalTotals(undefined);Promise.all([invoke<{incomeMicros:string;expenseMicros:string;count:number}>('ledger_totals',{from:'0001-01-01',to:'9999-12-31',kind:kind??null}),invoke<{incomeMicros:string;expenseMicros:string;count:number}>('ledger_totals',{from,to,kind:kind??null})]).then(value=>{if(active)setGlobalTotals(value);}).catch(()=>{});return()=>{active=false;};},[from,to,kind,version,reload]);
  const filtered=useMemo(()=>sortGridMulti((rows??[]).filter(row=>(!kind||row.kind===kind)&&(!filters.category||categoryAllocations(row).some(a=>(a.category||null)===JSON.parse(filters.category)))&&(!filters.paymentMethod||(row.paymentMethod||null)===JSON.parse(filters.paymentMethod))&&(!filters.status||row.status===filters.status)),[sort,...(secondary.field?[{field:secondary.field,direction:secondary.direction}]:[])]),[rows,kind,filters,sort,secondary]);
  const pageCount=Math.max(1,Math.ceil(filtered.length/50)),current=Math.min(page,pageCount-1),pageRows=filtered.slice(current*50,current*50+50);
  const selection=(rows??[]).filter(r=>selected.includes(r.id));const shown=prefs.order.filter(c=>!prefs.hidden.includes(c));
@@ -56,6 +58,7 @@ export function LedgerTable({from,to,search,kind,language,version,catalog,disabl
  const extras=pending.filter(d=>d.id===null||!pageRows.some(r=>r.id===d.id));
  return <section className="grid-ledger">
  <div className="totals">{[[t.income,summary.income],[t.expense,summary.expense],[t.balance,summary.income-summary.expense]].map(([label,value])=><div className="metric surface" key={String(label)}><span>{String(label)}</span><strong><bdi>{money(value as bigint)}</bdi></strong></div>)}</div>
+ {globalTotals&&<details className="surface totals-detail"><summary>{tr('Total général et total de la période','Overall and period totals','סיכומים כלליים ולתקופה')}</summary>{globalTotals.map((value,i)=><p key={i}>{i===0?tr('Toutes les dates','All dates','כל התאריכים'):from+' – '+to} · {t.income}: {money(BigInt(value.incomeMicros))} · {t.expense}: {money(BigInt(value.expenseMicros))} · {t.balance}: {money(BigInt(value.incomeMicros)-BigInt(value.expenseMicros))} · {t.count}: {value.count}</p>)}</details>}
  <p>{t.realizedTotals} · {t.count} : {filtered.length}</p>
  <fieldset disabled={disabled} className="grid-controls"><div className="settings">
  <button onClick={()=>setEditing(v=>!v)} aria-pressed={editing}>{w.edit}</button>{kind!=='income'&&<button onClick={()=>add('expense')}>{w.addExpense}</button>}{kind!=='expense'&&<button onClick={()=>add('income')}>{w.addIncome}</button>}

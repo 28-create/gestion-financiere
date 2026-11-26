@@ -46,6 +46,7 @@ fn main() {
             data_tools::import_rows,
             data_tools::undo_import
             ,reporting::report_rows
+            ,reporting::ledger_totals
             ,reporting::transaction_history
             ,reporting::restore_revision
             ,data_tools::list_backups

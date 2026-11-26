@@ -1,21 +1,43 @@
 // Real WebView2/Tauri bridge tests. Runs only on a disposable Windows CI account.
 import assert from 'node:assert/strict';
 import {mkdir,copyFile,writeFile} from 'node:fs/promises';
+import net from 'node:net';
 import path from 'node:path';
-import os from 'node:os';
-import {spawn} from 'node:child_process';
-import {Builder,By,Capabilities,until,Key} from 'selenium-webdriver';
+import {spawn,spawnSync} from 'node:child_process';
+import {Builder,By,Capabilities,until} from 'selenium-webdriver';
 import {translations} from '../src/locales.ts';
 import {periodMetrics} from '../src/domain/analysis.ts';
 import {budgetUsage} from '../src/domain/features.ts';
 if(process.env.RUNNER_ENVIRONMENT!=='github-hosted')throw Error('Disposable Windows CI only');
 const root=path.resolve(process.env.RUNNER_TEMP,'finance-ui-'+process.env.GITHUB_RUN_ID),shots=path.resolve('ui-results');await mkdir(root,{recursive:true});await mkdir(shots,{recursive:true});
 const application=path.join(root,'gestion-financiere.exe');await copyFile('src-tauri/target/debug/gestion-financiere.exe',application);await writeFile(path.join(root,'portable-mode'),'');
-const tauriDriver=spawn(path.join(os.homedir(),'.cargo','bin','tauri-driver.exe'),[],{windowsHide:true,stdio:'inherit'});let driver;
+async function freePort(){return new Promise((resolve,reject)=>{const s=net.createServer();s.on('error',reject);s.listen(0,'127.0.0.1',()=>{const {port}=s.address();s.close(()=>resolve(port));});});}
+const debugPort=await freePort(),driverPort=await freePort();
+const appProc=spawn(application,[],{cwd:root,stdio:'inherit',env:{...process.env,WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:`--remote-debugging-port=${debugPort}`,WEBVIEW2_USER_DATA_FOLDER:path.join(root,'webview2')}});
+let appExited=null;appProc.on('exit',(code,signal)=>{appExited={code,signal};});
+const edgeDriver=spawn(path.resolve('msedgedriver.exe'),[`--port=${driverPort}`,'--allowed-ips=127.0.0.1'],{stdio:['ignore','ignore','inherit']});
+let driver;
+async function resizeWindow(width,height){
+ try{await driver.manage().window().setRect({width,height});}catch{}
+ const current=await driver.executeScript('return window.outerWidth');
+ if(Math.abs(current-width)>30){
+  spawnSync('pwsh',['-NoProfile','-Command',`Add-Type 'using System;using System.Runtime.InteropServices;public class W{[DllImport("user32.dll")]public static extern bool MoveWindow(IntPtr h,int x,int y,int w,int ht,bool r);}';$p=Get-Process -Id ${appProc.pid};if($p.MainWindowHandle -ne 0){[W]::MoveWindow($p.MainWindowHandle,20,20,${width},${height},$true)|Out-Null}`],{stdio:'inherit'});
+  await new Promise(r=>setTimeout(r,300));
+ }
+}
 try{
- for(let attempt=0;attempt<100;attempt++){try{const response=await fetch('http://127.0.0.1:4444/status');if(response.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
- const capabilities=new Capabilities();capabilities.setBrowserName('wry');capabilities.set('tauri:options',{application});
- driver=await new Builder().withCapabilities(capabilities).usingServer('http://127.0.0.1:4444/').build();await driver.manage().setTimeouts({script:30000,pageLoad:30000,implicit:0});await driver.wait(until.elementLocated(By.css('h1')),30000);
+ let cdpReady=false;
+ for(let attempt=0;attempt<150;attempt++){
+  if(appExited)throw Error(`Application exited before DevTools was ready: ${JSON.stringify(appExited)}`);
+  try{const response=await fetch(`http://127.0.0.1:${debugPort}/json/list`);if(response.ok){const targets=await response.json();if(Array.isArray(targets)&&targets.some(t=>t.type==='page')){cdpReady=true;break;}}}catch{}
+  await new Promise(r=>setTimeout(r,200));
+ }
+ if(!cdpReady)throw Error(`WebView2 DevTools port ${debugPort} did not become ready`);
+ let driverReady=false;
+ for(let attempt=0;attempt<100;attempt++){try{const response=await fetch(`http://127.0.0.1:${driverPort}/status`);if(response.ok){driverReady=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}
+ if(!driverReady)throw Error(`msedgedriver port ${driverPort} did not become ready`);
+ const capabilities=new Capabilities();capabilities.setBrowserName('MicrosoftEdge');capabilities.set('ms:edgeOptions',{debuggerAddress:`127.0.0.1:${debugPort}`});
+ driver=await new Builder().withCapabilities(capabilities).usingServer(`http://127.0.0.1:${driverPort}/`).build();await driver.manage().setTimeouts({script:30000,pageLoad:30000,implicit:0});await driver.wait(until.elementLocated(By.css('h1')),30000);
  await driver.executeScript("window.uiErrors=[];window.addEventListener('error',e=>window.uiErrors.push(e.message));window.addEventListener('unhandledrejection',e=>window.uiErrors.push(String(e.reason)));");
  async function call(command,args={}){const result=await driver.executeAsyncScript(function(command,args,done){window.__TAURI_INTERNALS__.invoke(command,args).then(value=>done({value})).catch(error=>done({error:String(error)}));},command,args);if(result.error)throw Error(result.error);return result.value;}
  const rows=()=>call('report_rows',{from:'0001-01-01',to:'9999-12-31',search:''});
@@ -46,8 +68,8 @@ try{
   const selects=await driver.findElements(By.css('.topbar select'));await selects[0].findElement(By.css(`option[value="${language}"]`)).click();await driver.wait(async()=>await driver.executeScript('return document.documentElement.lang')===language,10000);assert.equal(await driver.executeScript('return document.documentElement.dir'),language==='he'?'rtl':'ltr');
   const dashboardLabel=language==='fr'?'Tableau de bord annuel':language==='he'?'לוח בקרה שנתי':'Annual dashboard';
   const navButtons=await driver.findElements(By.css('.side-nav button[title]'));await navButtons[0].click();await driver.wait(until.elementLocated(By.css('.annual-metrics')),10000);assert.ok((await driver.findElement(By.css('h1')).getText()).length>0);
-  for(const theme of ['light','dark']){const themeSelect=(await driver.findElements(By.css('.topbar select')))[1];await themeSelect.findElement(By.css(`option[value="${theme}"]`)).click();await driver.wait(async()=>await driver.executeScript('return document.documentElement.dataset.theme')===theme,10000);await driver.manage().window().setRect({width:1180,height:780});await driver.wait(until.elementLocated(By.css('.chart-host canvas')),10000);await writeFile(path.join(shots,`${language}-${theme}-1180.png`),await driver.takeScreenshot(),'base64');}
+  for(const theme of ['light','dark']){const themeSelect=(await driver.findElements(By.css('.topbar select')))[1];await themeSelect.findElement(By.css(`option[value="${theme}"]`)).click();await driver.wait(async()=>await driver.executeScript('return document.documentElement.dataset.theme')===theme,10000);await resizeWindow(1180,780);await driver.wait(until.elementLocated(By.css('.chart-host canvas')),10000);await writeFile(path.join(shots,`${language}-${theme}-1180.png`),await driver.takeScreenshot(),'base64');}
  }
- await driver.manage().window().setRect({width:540,height:700});await writeFile(path.join(shots,'compact-540.png'),await driver.takeScreenshot(),'base64');assert.ok(await driver.executeScript('return document.documentElement.scrollWidth<=window.innerWidth+2'));
+ await resizeWindow(540,700);await writeFile(path.join(shots,'compact-540.png'),await driver.takeScreenshot(),'base64');assert.ok(await driver.executeScript('return document.documentElement.scrollWidth<=window.innerWidth+2'));
  assert.deepEqual(await driver.executeScript('return window.uiErrors??[]'),[]);await writeFile(path.join(shots,'result.json'),JSON.stringify({result:'OK',nativeBridge:true,exactAmounts:true,restoreOnDisk:true,duplicateReview:true,languages:['fr','he','en'],themes:['light','dark'],widths:[1180,540],transactions:(await rows()).length},null,2));console.log('Windows native bridge and UI tests passed.');
-}catch(error){if(driver)try{await writeFile(path.join(shots,'failure.png'),await driver.takeScreenshot(),'base64');}catch{}throw error;}finally{try{await driver?.quit();}finally{tauriDriver.kill();}}
+}catch(error){if(driver)try{await writeFile(path.join(shots,'failure.png'),await driver.takeScreenshot(),'base64');}catch{}throw error;}finally{try{await driver?.quit();}catch{}edgeDriver.kill();if(!appExited&&appProc.pid){try{spawnSync('taskkill',['/F','/T','/PID',String(appProc.pid)],{stdio:'ignore'});}catch{appProc.kill();}}}
